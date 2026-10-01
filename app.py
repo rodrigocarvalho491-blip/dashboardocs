@@ -23,7 +23,6 @@ def extrair_cidade(endereco):
     if pd.isna(endereco):
         return "-"
     s = str(endereco).strip()
-    # Normaliza separadores (substitui ponto e vírgula ou pipe por vírgula)
     s_norm = s.replace(';', ',').replace('|', ',')
     partes = [p.strip() for p in s_norm.split(',')]
     if len(partes) >= 2:
@@ -32,6 +31,23 @@ def extrair_cidade(endereco):
             cidade = partes[-3].strip()
         return cidade.title()
     return s.title()
+
+# Função para classificar o status do prazo em relação a hoje
+def classificar_status(data_prazo):
+    if pd.isna(data_prazo):
+        return "Normal"
+    
+    hoje = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    prazo_dia = data_prazo.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Vencido (prazo anterior a hoje)
+    if prazo_dia < hoje:
+        return "🔴 Vencido"
+    # Vence nos próximos 7 dias (incluindo hoje)
+    elif hoje <= prazo_dia <= (hoje + timedelta(days=7)):
+        return "🟡 Vence na Semana"
+    else:
+        return "🟢 No Prazo"
 
 # --- CABEÇALHO DO APP COM LOGO ---
 col_logo, col_titulo = st.columns([1, 4])
@@ -81,7 +97,10 @@ if arquivo_excel is not None:
         # Garante que a coluna de Sub-Classificação está tratada como texto
         df_pendentes[COL_SUB_CLASSIF] = df_pendentes[COL_SUB_CLASSIF].fillna("-").astype(str)
         
-        # 4. ORDENAÇÃO OBRIGATÓRIA: Da data mais próxima para a mais distante (do dia/atrasadas para o futuro)
+        # 4. CRIAR COLUNA DE ALERTA DE PRAZO
+        df_pendentes['Status Prazo'] = df_pendentes[COL_PRAZO].apply(classificar_status)
+        
+        # 5. ORDENAÇÃO OBRIGATÓRIA: Da data mais próxima para a mais distante (do dia/atrasadas para o futuro)
         df_pendentes = df_pendentes.sort_values(by=COL_PRAZO, ascending=True)
         
         # --- SEÇÃO 2: PAINEL DE OCORRÊNCIAS (DASHBOARD GERAL) ---
@@ -126,8 +145,9 @@ if arquivo_excel is not None:
         # Formata a data para visualização amigável
         df_filtrado['Prazo Formatado'] = df_filtrado[COL_PRAZO].dt.strftime('%d/%m/%Y %H:%M')
         
-        # Seleção das colunas principais para a tabela
+        # Seleção das colunas principais para a tabela (com o Status de Alerta na frente)
         df_exibicao = df_filtrado[[
+            'Status Prazo',
             COL_OCORRENCIA, 
             COL_CLIENTE, 
             'Cidade', 
@@ -136,12 +156,16 @@ if arquivo_excel is not None:
         ]]
         
         # Métricas de Resumo
-        col_m1, col_m2, col_m3 = st.columns(3)
+        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         with col_m1:
-            st.metric("Visitas Pendentes (Filtro)", len(df_exibicao))
+            st.metric("Visitas Pendentes", len(df_exibicao))
         with col_m2:
-            st.metric("Cidades na Rota", df_exibicao['Cidade'].nunique())
+            vencidas_qt = len(df_exibicao[df_exibicao['Status Prazo'] == "🔴 Vencido"])
+            st.metric("Ocorrências Vencidas", vencidas_qt)
         with col_m3:
+            semana_qt = len(df_exibicao[df_exibicao['Status Prazo'] == "🟡 Vence na Semana"])
+            st.metric("Vencem na Semana", semana_qt)
+        with col_m4:
             mais_urgente = df_exibicao['Prazo Formatado'].iloc[0] if not df_exibicao.empty else "-"
             st.metric("Próximo Vencimento", mais_urgente)
         
@@ -157,6 +181,7 @@ if arquivo_excel is not None:
                 use_container_width=True,
                 hide_index=True,
                 column_config={
+                    'Status Prazo': st.column_config.TextColumn("Alerta", width="small"),
                     COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small"),
                     COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large"),
                     'Cidade': st.column_config.TextColumn("Cidade", width="small"),
@@ -178,6 +203,7 @@ if arquivo_excel is not None:
         else:
             df_comodato['Prazo Formatado'] = df_comodato[COL_PRAZO].dt.strftime('%d/%m/%Y %H:%M')
             df_comodato_exibicao = df_comodato[[
+                'Status Prazo',
                 COL_OCORRENCIA, 
                 COL_CLIENTE, 
                 'Cidade', 
@@ -193,6 +219,7 @@ if arquivo_excel is not None:
                 use_container_width=True,
                 hide_index=True,
                 column_config={
+                    'Status Prazo': st.column_config.TextColumn("Alerta", width="small"),
                     COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small"),
                     COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large"),
                     'Cidade': st.column_config.TextColumn("Cidade", width="small"),
