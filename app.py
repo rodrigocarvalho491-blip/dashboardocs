@@ -19,6 +19,10 @@ COL_PRAZO = "Prazo de Atendimento"
 COL_FECHAMENTO = "Data/Hora de fechamento" # Usado para desconsiderar as já tratadas
 COL_SUB_CLASSIF = "Subclassificação Ocorrência"
 
+# Inicializa a memória de ocorrências tratadas manualmente na sessão do Streamlit
+if "tratadas_manualmente" not in st.session_state:
+    st.session_state.tratadas_manualmente = set()
+
 # Função robusta para extrair apenas o nome limpo da cidade do endereço de entrega
 def extrair_cidade(endereco):
     if pd.isna(endereco):
@@ -90,8 +94,12 @@ if arquivo_excel is not None:
         # Remove linhas totalmente vazias que possam vir no final do arquivo
         df = df.dropna(subset=[COL_OCORRENCIA])
         
-        # 1. Filtro base: Desconsiderar ocorrências que já possuem tratativa (Data de fechamento preenchida)
+        # 1. Filtro base: Desconsiderar ocorrências tratadas no Excel e as marcadas manualmente na sessão
         df_pendentes = df[df[COL_FECHAMENTO].isna()].copy()
+        
+        # Converte número da ocorrência para inteiro/string limpa para filtro seguro
+        df_pendentes[COL_OCORRENCIA] = df_pendentes[COL_OCORRENCIA].astype(int)
+        df_pendentes = df_pendentes[~df_pendentes[COL_OCORRENCIA].isin(st.session_state.tratadas_manualmente)]
         
         # 2. Tratamento das colunas de Data para o formato datetime
         df_pendentes['Prazo_DT'] = pd.to_datetime(df_pendentes[COL_PRAZO], format="%d/%m/%Y %H:%M", errors='coerce')
@@ -159,65 +167,83 @@ if arquivo_excel is not None:
         # Formata a data para exibir APENAS A DATA (sem horário)
         df_filtrado['Data Atendimento'] = df_filtrado['Prazo_DT'].dt.strftime('%d/%m/%Y')
         
-        # Seleção das colunas principais para a tabela geral
-        df_exibicao = df_filtrado[[
-            'Status Geral',
-            'Dias Restantes',
-            COL_OCORRENCIA, 
-            COL_CLIENTE, 
-            'Cidade', 
-            COL_SUB_CLASSIF,
-            'Data Atendimento'
-        ]]
-        
         # Métricas de Resumo
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         with col_m1:
-            st.metric("Visitas Pendentes", len(df_exibicao))
+            st.metric("Visitas Pendentes", len(df_filtrado))
         with col_m2:
-            hoje_qt = len(df_exibicao[df_exibicao['Status Geral'] == "🔵 Vence Hoje"])
+            hoje_qt = len(df_filtrado[df_filtrado['Status Geral'] == "🔵 Vence Hoje"])
             st.metric("Vence Hoje", hoje_qt)
         with col_m3:
-            vencidas_qt = len(df_exibicao[df_exibicao['Status Geral'] == "🔴 Vencido"])
+            vencidas_qt = len(df_filtrado[df_filtrado['Status Geral'] == "🔴 Vencido"])
             st.metric("Ocorrências Vencidas", vencidas_qt)
         with col_m4:
-            mais_urgente = df_exibicao['Data Atendimento'].iloc[0] if not df_exibicao.empty else "-"
+            mais_urgente = df_filtrado['Data Atendimento'].iloc[0] if not df_filtrado.empty else "-"
             st.metric("Próximo Vencimento", mais_urgente)
         
         st.write("---")
         st.markdown("**Lista de Ocorrências Ordenadas (Mais Próxima para a Mais Distante):**")
         
-        if df_exibicao.empty:
+        if df_filtrado.empty:
             st.success("✅ Excelente! Não há nenhuma ocorrência pendente para os filtros selecionados.")
         else:
-            df_exibicao[COL_OCORRENCIA] = df_exibicao[COL_OCORRENCIA].astype(int).astype(str)
-            st.dataframe(
-                df_exibicao,
-                use_container_width=True,
-                hide_index=True,
+            # Exibição interativa com caixas de seleção (checkbox) por ocorrência para marcar como tratada
+            st.markdown("💡 *Selecione a caixa na linha da ocorrência que deseja tratar e clique no botão de confirmação abaixo.*")
+            
+            # Prepara dataframe para visualização limpa
+            df_exibicao = df_filtrado[[
+                'Status Geral',
+                'Dias Restantes',
+                COL_OCORRENCIA, 
+                COL_CLIENTE, 
+                'Cidade', 
+                COL_SUB_CLASSIF,
+                'Data Atendimento'
+            ]].copy()
+            df_exibicao[COL_OCORRENCIA] = df_exibicao[COL_OCORRENCIA].astype(str)
+            
+            # Adiciona coluna de seleção interativa
+            edited_df = st.data_editor(
+                df_exibicao.assign(Tratar=False),
                 column_config={
-                    'Status Geral': st.column_config.TextColumn("Status", width="small"),
-                    'Dias Restantes': st.column_config.NumberColumn("Dias Restantes", width="small"),
-                    COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small"),
-                    COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large"),
-                    'Cidade': st.column_config.TextColumn("Cidade", width="small"),
-                    COL_SUB_CLASSIF: st.column_config.TextColumn("Sub-Classificação", width="medium"),
-                    'Data Atendimento': st.column_config.TextColumn("Data de Atendimento", width="medium"),
-                }
+                    "Tratar": st.column_config.CheckboxColumn("✅ Marcar Tratada?", required=True),
+                    'Status Geral': st.column_config.TextColumn("Status", width="small", disabled=True),
+                    'Dias Restantes': st.column_config.NumberColumn("Dias Restantes", width="small", disabled=True),
+                    COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small", disabled=True),
+                    COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large", disabled=True),
+                    'Cidade': st.column_config.TextColumn("Cidade", width="small", disabled=True),
+                    COL_SUB_CLASSIF: st.column_config.TextColumn("Sub-Classificação", width="medium", disabled=True),
+                    'Data Atendimento': st.column_config.TextColumn("Data de Atendimento", width="medium", disabled=True),
+                },
+                hide_index=True,
+                use_container_width=True,
+                key="editor_geral"
             )
+            
+            # Botão de confirmação para remover do painel com segurança contra cliques acidentais
+            ocorrencias_para_tratar = edited_df[edited_df["Tratar"] == True][COL_OCORRENCIA].tolist()
+            
+            if ocorrencias_para_tratar:
+                st.warning(f"⚠️ Você selecionou **{len(ocorrencias_para_tratar)}** ocorrência(s) para marcar como tratada(s).")
+                if st.button("🔒 Confirmar e Remover do Painel", type="primary"):
+                    for oc in ocorrencias_para_tratar:
+                        st.session_state.tratadas_manualmente.add(int(oc))
+                    st.success("✅ Ocorrência(s) tratada(s) com sucesso e removida(s) do painel!")
+                    st.rerun()
 
         st.divider()
 
         # --- SEÇÃO 3: RELATÓRIO SEPARADO DE COMODATO INATIVO ---
         st.subheader("3. Relatório Específico: Comodato Inativo")
-        st.markdown("Separação exclusiva das ocorrências de **Comodato Inativo** com contagem regressiva em semanas (1ª, 2ª e 3ª semana).")
+        st.markdown("Separação exclusiva das ocorrências de **Comodato Inativo** com contagem regressiva em semanas.")
 
         df_comodato = df_pendentes[df_pendentes[COL_SUB_CLASSIF].str.contains("Comodato Inativo", case=False, na=False)].copy()
 
         if df_comodato.empty:
-            st.info("ℹ️️ Não foram encontradas ocorrências pendentes com a sub-classificação 'Comodato Inativo' no ficheiro enviado.")
+            st.info("ℹ️ Não foram encontradas ocorrências pendentes com a sub-classificação 'Comodato Inativo' no ficheiro enviado.")
         else:
             df_comodato['Data Atendimento'] = df_comodato['Prazo_DT'].dt.strftime('%d/%m/%Y')
+            
             df_comodato_exibicao = df_comodato[[
                 'Status Comodato',
                 'Dias Restantes',
@@ -226,30 +252,45 @@ if arquivo_excel is not None:
                 'Cidade', 
                 COL_SUB_CLASSIF,
                 'Data Atendimento'
-            ]]
-            df_comodato_exibicao[COL_OCORRENCIA] = df_comodato_exibicao[COL_OCORRENCIA].astype(int).astype(str)
+            ]].copy()
+            df_comodato_exibicao[COL_OCORRENCIA] = df_comodato_exibicao[COL_OCORRENCIA].astype(str)
 
             st.metric("Total de Comodatos Inativos Pendentes", len(df_comodato_exibicao))
             
-            st.dataframe(
-                df_comodato_exibicao,
-                use_container_width=True,
-                hide_index=True,
+            # Editor interativo também para os comodatos
+            edited_comodato = st.data_editor(
+                df_comodato_exibicao.assign(Tratar=False),
                 column_config={
-                    'Status Comodato': st.column_config.TextColumn("Status Semanal", width="small"),
-                    'Dias Restantes': st.column_config.NumberColumn("Dias Restantes", width="small"),
-                    COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small"),
-                    COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large"),
-                    'Cidade': st.column_config.TextColumn("Cidade", width="small"),
-                    COL_SUB_CLASSIF: st.column_config.TextColumn("Sub-Classificação", width="medium"),
-                    'Data Atendimento': st.column_config.TextColumn("Data de Atendimento", width="medium"),
-                }
+                    "Tratar": st.column_config.CheckboxColumn("✅ Marcar Tratada?", required=True),
+                    'Status Comodato': st.column_config.TextColumn("Status Semanal", width="small", disabled=True),
+                    'Dias Restantes': st.column_config.NumberColumn("Dias Restantes", width="small", disabled=True),
+                    COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small", disabled=True),
+                    COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large", disabled=True),
+                    'Cidade': st.column_config.TextColumn("Cidade", width="small", disabled=True),
+                    COL_SUB_CLASSIF: st.column_config.TextColumn("Sub-Classificação", width="medium", disabled=True),
+                    'Data Atendimento': st.column_config.TextColumn("Data de Atendimento", width="medium", disabled=True),
+                },
+                hide_index=True,
+                use_container_width=True,
+                key="editor_comodato"
             )
+            
+            comodatos_para_tratar = edited_comodato[edited_comodato["Tratar"] == True][COL_OCORRENCIA].tolist()
+            if comodatos_para_tratar:
+                st.warning(f"⚠️ Você selecionou **{len(comodatos_para_tratar)}** comodato(s) inativo(s) para tratar.")
+                if st.button("🔒 Confirmar Tratativa de Comodato", type="primary", key="btn_comodato"):
+                    for oc in comodatos_para_tratar:
+                        st.session_state.tratadas_manualmente.add(int(oc))
+                    st.success("✅ Comodato(s) tratado(s) com sucesso e removido(s) do painel!")
+                    st.rerun()
 
-            # Botão para exportar esta tabela específica para Excel
+            st.write("")
+            # Botão para exportar esta tabela específica para Excel (sem a coluna de checkbox)
+            df_comodato_download = df_comodato_exibicao.copy()
+            
             output = BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df_comodato_exibicao.to_excel(writer, index=False, sheet_name='Comodato Inativo')
+                df_comodato_download.to_excel(writer, index=False, sheet_name='Comodato Inativo')
             processed_data = output.getvalue()
 
             st.download_button(
