@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
+from io import BytesIO
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 DIRETORIO_ATUAL = os.path.dirname(os.path.abspath(__file__))
@@ -15,16 +16,24 @@ COL_CLIENTE = "Nome do cliente"
 COL_ENDERECO = "Endereço de Entrega"
 COL_PRAZO = "Prazo de Atendimento"
 COL_FECHAMENTO = "Data/Hora de fechamento" # Usado para desconsiderar as já tratadas
+COL_SUB_CLASSIF = "Subclassificação Ocorrência"
 
-# Função para extrair apenas a cidade da string de endereço do seu sistema
+# Função robusta para extrair apenas o nome limpo da cidade do endereço de entrega
 def extrair_cidade(endereco):
     if pd.isna(endereco):
         return "-"
-    partes = str(endereco).split(',')
-    if len(partes) >= 3:
-        # Pega a penúltima parte (ex: 'TAUBATE' de '...,TAUBATE,São Paulo')
-        return partes[-2].strip().title()
-    return str(endereco).strip()
+    s = str(endereco).strip()
+    # Normaliza separadores (substitui ponto e vírgula ou pipe por vírgula)
+    s_norm = s.replace(';', ',').replace('|', ',')
+    partes = [p.strip() for p in s_norm.split(',')]
+    if len(partes) >= 2:
+        # A cidade geralmente fica na penúltima posição antes do estado
+        cidade = partes[-2].strip()
+        # Se por acaso a penúltima parte for um número ou código postal, tenta a anterior
+        if cidade.isdigit() and len(partes) >= 3:
+            cidade = partes[-3].strip()
+        return cidade.title()
+    return s.title()
 
 # --- CABEÇALHO DO APP COM LOGO ---
 col_logo, col_titulo = st.columns([1, 4])
@@ -51,9 +60,6 @@ arquivo_excel = st.file_uploader(
 
 st.divider()
 
-# --- SEÇÃO 2: PAINEL DE OCORRÊNCIAS (DASHBOARD) ---
-st.subheader("2. Agenda Pendente de Visitas")
-
 if arquivo_excel is not None:
     try:
         # Lê o Excel pulando as 11 primeiras linhas de cabeçalho do relatório exportado
@@ -62,7 +68,7 @@ if arquivo_excel is not None:
         # Remove linhas totalmente vazias que possam vir no final do arquivo
         df = df.dropna(subset=[COL_OCORRENCIA])
         
-        # 1. Filtro: Desconsiderar ocorrências que já possuem tratativa (Data de fechamento preenchida)
+        # 1. Filtro base: Desconsiderar ocorrências que já possuem tratativa (Data de fechamento preenchida)
         df_pendentes = df[df[COL_FECHAMENTO].isna()].copy()
         
         # 2. Tratamento da coluna de Prazo de Atendimento para o formato de Data
@@ -71,38 +77,60 @@ if arquivo_excel is not None:
         # Remove linhas onde o prazo não pôde ser lido
         df_pendentes = df_pendentes.dropna(subset=[COL_PRAZO])
         
-        # 3. Extrair a Cidade do Endereço de Entrega
+        # 3. Extrair apenas o nome da Cidade do Endereço de Entrega
         df_pendentes['Cidade'] = df_pendentes[COL_ENDERECO].apply(extrair_cidade)
+        
+        # Garante que a coluna de Sub-Classificação está tratada como texto
+        df_pendentes[COL_SUB_CLASSIF] = df_pendentes[COL_SUB_CLASSIF].fillna("-").astype(str)
         
         # 4. Ordenação: Da data mais próxima para a mais distante
         df_pendentes = df_pendentes.sort_values(by=COL_PRAZO, ascending=True)
         
-        # --- FILTRO PARA A SEMANA ---
+        # --- SEÇÃO 2: PAINEL DE OCORRÊNCIAS (DASHBOARD GERAL) ---
+        st.subheader("2. Agenda Geral de Visitas Pendentes")
+        
+        # ÁREA DE FILTROS DO DASHBOARD GERAL
         st.markdown("### Filtros de Visualização")
         mostrar_so_semana = st.toggle("📅 Mostrar apenas ocorrências com prazo para os próximos 7 dias", value=False)
         
+        cidades_unicas = sorted(list(df_pendentes['Cidade'].unique()))
+        sub_class_unicas = sorted(list(df_pendentes[COL_SUB_CLASSIF].unique()))
+        
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            cidades_selecionadas = st.multiselect("Filtrar por Cidade(s):", cidades_unicas, default=[], key="filtro_cidade")
+        with col_f2:
+            sub_class_selecionadas = st.multiselect("Filtrar por Sub-Classificação:", sub_class_unicas, default=[], key="filtro_sub")
+        
+        # Aplicação dos filtros na cópia do dataframe principal
+        df_filtrado = df_pendentes.copy()
         if mostrar_so_semana:
             hoje = datetime.now()
             daqui_uma_semana = hoje + timedelta(days=7)
-            # Filtra do dia de hoje até daqui a 7 dias (incluindo as atrasadas)
-            df_pendentes = df_pendentes[df_pendentes[COL_PRAZO] <= daqui_uma_semana]
+            df_filtrado = df_filtrado[df_filtrado[COL_PRAZO] <= daqui_uma_semana]
+            
+        if cidades_selecionadas:
+            df_filtrado = df_filtrado[df_filtrado['Cidade'].isin(cidades_selecionadas)]
+            
+        if sub_class_selecionadas:
+            df_filtrado = df_filtrado[df_filtrado[COL_SUB_CLASSIF].isin(sub_class_selecionadas)]
         
         # Formata a data para visualização amigável
-        df_pendentes['Prazo Formatado'] = df_pendentes[COL_PRAZO].dt.strftime('%d/%m/%Y %H:%M')
+        df_filtrado['Prazo Formatado'] = df_filtrado[COL_PRAZO].dt.strftime('%d/%m/%Y %H:%M')
         
-        # Seleciona apenas as colunas práticas para exibir no ecrã
-        df_exibicao = df_pendentes[[
+        # Seleção das colunas principais para a tabela (com Sub-classificação visível)
+        df_exibicao = df_filtrado[[
             COL_OCORRENCIA, 
             COL_CLIENTE, 
             'Cidade', 
+            COL_SUB_CLASSIF,
             'Prazo Formatado'
         ]]
         
-        # --- MÉTRICAS DE RESUMO ---
-        st.write("---")
+        # Métricas de Resumo
         col_m1, col_m2, col_m3 = st.columns(3)
         with col_m1:
-            st.metric("Visitas Pendentes (Filtro Atual)", len(df_exibicao))
+            st.metric("Visitas Pendentes (Filtro)", len(df_exibicao))
         with col_m2:
             st.metric("Cidades na Rota", df_exibicao['Cidade'].nunique())
         with col_m3:
@@ -110,16 +138,12 @@ if arquivo_excel is not None:
             st.metric("Próximo Vencimento", mais_urgente)
         
         st.write("---")
-        
-        # --- TABELA DE DADOS INTERATIVA ---
         st.markdown("**Lista de Ocorrências Ordenadas:**")
         
         if df_exibicao.empty:
-            st.success("✅ Excelente! Não há nenhuma ocorrência pendente no período selecionado.")
+            st.success("✅ Excelente! Não há nenhuma ocorrência pendente para os filtros selecionados.")
         else:
-            # Garante que o número da ocorrência seja exibido sem casas decimais (.0)
             df_exibicao[COL_OCORRENCIA] = df_exibicao[COL_OCORRENCIA].astype(int).astype(str)
-            
             st.dataframe(
                 df_exibicao,
                 use_container_width=True,
@@ -127,16 +151,67 @@ if arquivo_excel is not None:
                 column_config={
                     COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small"),
                     COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large"),
-                    'Cidade': st.column_config.TextColumn("Cidade", width="medium"),
+                    'Cidade': st.column_config.TextColumn("Cidade", width="small"),
+                    COL_SUB_CLASSIF: st.column_config.TextColumn("Sub-Classificação", width="medium"),
                     'Prazo Formatado': st.column_config.TextColumn("Prazo de Atendimento", width="medium"),
                 }
+            )
+
+        st.divider()
+
+        # --- SEÇÃO 3: RELATÓRIO SEPARADO DE COMODATO INATIVO ---
+        st.subheader("3. Relatório Específico: Comodato Inativo")
+        st.markdown("Separação exclusiva das ocorrências de **Comodato Inativo** ordenadas por prazo para planeamento de recolha/visitas.")
+
+        # Filtra especificamente por Comodato Inativo (ignora maiúsculas/minúsculas para segurança)
+        df_comodato = df_pendentes[df_pendentes[COL_SUB_CLASSIF].str.contains("Comodato Inativo", case=False, na=False)].copy()
+
+        if df_comodato.empty:
+            st.info("ℹ️ Não foram encontradas ocorrências pendentes com a sub-classificação 'Comodato Inativo' no ficheiro enviado.")
+        else:
+            df_comodato['Prazo Formatado'] = df_comodato[COL_PRAZO].dt.strftime('%d/%m/%Y %H:%M')
+            df_comodato_exibicao = df_comodato[[
+                COL_OCORRENCIA, 
+                COL_CLIENTE, 
+                'Cidade', 
+                COL_SUB_CLASSIF,
+                'Prazo Formatado'
+            ]]
+            df_comodato_exibicao[COL_OCORRENCIA] = df_comodato_exibicao[COL_OCORRENCIA].astype(int).astype(str)
+
+            st.metric("Total de Comodatos Inativos Pendentes", len(df_comodato_exibicao))
+            
+            st.dataframe(
+                df_comodato_exibicao,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small"),
+                    COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large"),
+                    'Cidade': st.column_config.TextColumn("Cidade", width="small"),
+                    COL_SUB_CLASSIF: st.column_config.TextColumn("Sub-Classificação", width="medium"),
+                    'Prazo Formatado': st.column_config.TextColumn("Prazo de Atendimento", width="medium"),
+                }
+            )
+
+            # Botão para exportar esta tabela específica para Excel
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df_comodato_exibicao.to_excel(writer, index=False, sheet_name='Comodato Inativo')
+            processed_data = output.getvalue()
+
+            st.download_button(
+                label="📥 Baixar Planilha Separada (Comodato Inativo)",
+                data=processed_data,
+                file_name="comodatos_inativos_pendentes.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
     except Exception as e:
         st.error(f"⚠️ Ocorreu um erro ao processar o ficheiro. Certifique-se de ser o relatório padrão do sistema. Erro técnico: {e}")
 
 else:
-    st.info("👆 Por favor, faça o upload da folha de cálculo atualizada de ocorrências acima para visualizar a agenda.")
+    st.info("👆 Por favor, faça o upload da folha de cálculo atualizada de ocorrências acima para carregar o dashboard.")
 
 st.divider()
 
