@@ -1,35 +1,39 @@
-import os
-from PIL import Image
-from fpdf import FPDF
-import streamlit as st
-import streamlit.components.v1 as components
+Com base na análise do arquivo Excel que você enviou (`Minhas Ocorrências (Pós-Vendas)-2026-10-01-09-04-41.xlsx`), identifiquei três detalhes importantes para o funcionamento perfeito do seu Dashboard:
 
-# 1. Resolução de caminhos absolutos
+1. **Cabeçalho deslocado:** No seu sistema (CSI/CRM), o relatório é exportado com um cabeçalho de 11 linhas. O código já foi ajustado para pular essas linhas iniciais e ler os dados corretamente (`header=11`).
+2. **Coluna de Cidade:** A cidade não vem em uma coluna isolada, ela vem dentro de `Endereço de Entrega` (ex: *57711|Padrão,JARDIM DAS NACOES,TAUBATE,São Paulo*). Criei uma função no código que extrai automaticamente apenas a cidade (TAUBATE) para deixar a visualização limpa.
+3. **Regra de Tratativa:** Você mencionou *"As ocorrências que tiverem preenchimento na coluna de prazo de atendimento, desconsidere"*, mas também pediu para *"ordenar por prazo de atendimento"*. Como não é possível ordenar por uma coluna vazia, assumi que a coluna que define se o chamado já teve tratativa no seu relatório é a **`Data/Hora de fechamento`** (ou `Solução`). Deixei isso configurado no código.
+
+Aqui está o código completo da nova tela, mantendo a identidade visual e adicionando o filtro semanal solicitado:
+
+```python
+import os
+import pandas as pd
+import streamlit as st
+from datetime import datetime, timedelta
+
+# --- CONFIGURAÇÃO DA PÁGINA ---
 DIRETORIO_ATUAL = os.path.dirname(os.path.abspath(__file__))
 LOGO_PATH = os.path.join(DIRETORIO_ATUAL, "logo.png")
-LOGO2_PATH = os.path.join(DIRETORIO_ATUAL, "logo2.png")
 
-st.set_page_config(page_title="Relatório Fotográfico", page_icon="📷", layout="wide")
+st.set_page_config(page_title="Dashboard de Ocorrências", page_icon="📊", layout="wide")
 
-# --- IDENTIDADE VISUAL CONSIGAZ ---
-CUSTOM_CSS = """
+# --- MAPEAMENTO DAS COLUNAS DO SEU EXCEL ---
+COL_OCORRENCIA = "Número da ocorrência"
+COL_CLIENTE = "Nome do cliente"
+COL_ENDERECO = "Endereço de Entrega"
+COL_PRAZO = "Prazo de Atendimento"
+COL_FECHAMENTO = "Data/Hora de fechamento" # Usado para desconsiderar as já tratadas
 
-"""
-st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
-
-# Inicializa as variáveis de controle no session_state
-if "reset_counter" not in st.session_state:
-    st.session_state.reset_counter = 0
-
-if "equipamentos" not in st.session_state:
-    st.session_state.equipamentos = []
-
-# Função MESTRE para limpar todos os dados e reiniciar o app
-def resetar_dados():
-    st.session_state.reset_counter += 1
-    st.session_state.equipamentos = []
-
-rc = st.session_state.reset_counter
+# Função para extrair apenas a cidade da string de endereço do seu sistema
+def extrair_cidade(endereco):
+    if pd.isna(endereco):
+        return "-"
+    partes = str(endereco).split(',')
+    if len(partes) >= 3:
+        # Pega a penúltima parte (ex: 'TAUBATE' de '...,TAUBATE,São Paulo')
+        return partes[-2].strip().title()
+    return str(endereco).strip()
 
 # --- CABEÇALHO DO APP COM LOGO ---
 col_logo, col_titulo = st.columns([1, 4])
@@ -41,240 +45,114 @@ with col_logo:
         st.caption("📷 *Adicione 'logo.png' na pasta do projeto*")
 
 with col_titulo:
-    st.title("Relatório Fotográfico & Equipamentos")
-    st.markdown("Gerador automatizado de relatórios técnicos.")
+    st.title("Gestão de Ocorrências & Visitas")
+    st.markdown("Painel de organização de agenda ordenado por prazo de atendimento.")
 
 st.divider()
 
-# --- BOTÃO FLUTUANTE VIA JAVASCRIPT ---
-st.button("🔄 Novo Cliente", on_click=resetar_dados)
+# --- SEÇÃO 1: IMPORTAÇÃO DE DADOS ---
+st.subheader("1. Atualização de Dados")
 
-# Injetamos JavaScript para forçar o botão "Novo Cliente" a flutuar no canto inferior direito
-JS_FLUTUANTE = """
-
-"""
-components.html(JS_FLUTUANTE, height=0, width=0)
-
-# --- SEÇÃO 1: DADOS DO CLIENTE ---
-st.subheader("1. Identificação do Cliente")
-col_c1, col_c2 = st.columns(2)
-
-with col_c1:
-    cod_cliente = st.text_input("Código do Cliente", placeholder="Ex: 87.653", key=f"input_cod_{rc}")
-with col_c2:
-    nome_cliente = st.text_input("Nome / Razão Social", placeholder="Ex: SABOR DA TERRA ALIMENTACAO CORPORATIVA", key=f"input_nome_{rc}")
+arquivo_excel = st.file_uploader(
+    "Faça o upload do relatório Excel (Pós-Vendas) 📂", 
+    type=["xlsx", "xls"]
+)
 
 st.divider()
 
-# --- SEÇÃO 2: UPLOAD DE FOTOS ---
-def carregar_fotos(label, max_arquivos=None):
-    fotos = st.file_uploader(label, type=["png", "jpg", "jpeg"], accept_multiple_files=True, key=f"uploader_{label}_{rc}")
-    if max_arquivos and fotos and len(fotos) > max_arquivos:
-        st.error(f"⚠️ Limite excedido para {label}. Serão considerados apenas os primeiros {max_arquivos} arquivos.")
-        return fotos[:max_arquivos]
-    return fotos
+# --- SEÇÃO 2: PAINEL DE OCORRÊNCIAS (DASHBOARD) ---
+st.subheader("2. Agenda Pendente de Visitas")
 
-st.subheader("2. Upload de Imagens do Relatório")
-col_f1, col_f2 = st.columns(2)
-with col_f1:
-    fotos_fachada = carregar_fotos("FACHADA", max_arquivos=2)
-    fotos_central = carregar_fotos("CENTRAL", max_arquivos=5)
-    fotos_cilindros = carregar_fotos("CILINDROS", max_arquivos=5)
-with col_f2:
-    fotos_abrigo = carregar_fotos("ABRIGO", max_arquivos=10)
-    fotos_equipamentos = carregar_fotos("EQUIPAMENTOS", max_arquivos=None)
-
-st.divider()
-
-# --- SEÇÃO 3: CADASTRO DE EQUIPAMENTOS ---
-st.subheader("3. Cadastro de Equipamentos")
-
-col_qtd, col_eq, col_vaz, col_btn = st.columns([1, 2, 2, 1])
-
-with col_qtd:
-    qtd_input = st.number_input("Quantidade", min_value=1, value=1, step=1, key=f"eq_qtd_{rc}")
-with col_eq:
-    nome_eq_input = st.text_input("Equipamento", placeholder="Ex: Forno Industrial", key=f"eq_nome_{rc}")
-with col_vaz:
-    vazao_input = st.text_input("Vazão Unitária (kg/h)", placeholder="Ex: 1 ou 1,6", key=f"eq_vazao_{rc}")
-
-with col_btn:
-    st.write(" ")
-    st.write(" ")
-    if st.button("➕ Adicionar", key=f"btn_add_eq_{rc}"):
-        if nome_eq_input.strip() and vazao_input.strip():
-            try:
-                vazao_clean_str = vazao_input.replace(",", ".").lower().replace("kg/h", "").strip()
-                vazao_unit = float(vazao_clean_str)
-                qtd = int(qtd_input)
-                
-                vazao_total_item = vazao_unit * qtd
-                vazao_formatada = f"{vazao_total_item:.2f}".replace(".", ",").rstrip("0").rstrip(",")
-
-                item_dict = {
-                    "qtd": qtd,
-                    "nome": nome_eq_input.strip().upper(),
-                    "vazao_unit": vazao_unit,
-                    "vazao_total_item": vazao_total_item,
-                    "texto": f"{qtd:02d} - {nome_eq_input.strip().upper()} - {vazao_formatada} kg/h"
+if arquivo_excel is not None:
+    try:
+        # Lê o Excel pulando as 11 primeiras linhas de cabeçalho do relatório exportado
+        df = pd.read_excel(arquivo_excel, header=11)
+        
+        # Remove linhas totalmente vazias que possam vir no final do arquivo
+        df = df.dropna(subset=[COL_OCORRENCIA])
+        
+        # 1. Filtro: Desconsiderar ocorrências que já possuem tratativa (Data de fechamento preenchida)
+        df_pendentes = df[df[COL_FECHAMENTO].isna()].copy()
+        
+        # 2. Tratamento da coluna de Prazo de Atendimento para o formato de Data
+        df_pendentes[COL_PRAZO] = pd.to_datetime(df_pendentes[COL_PRAZO], format="%d/%m/%Y %H:%M", errors='coerce')
+        
+        # Remove linhas onde o prazo não pôde ser lido
+        df_pendentes = df_pendentes.dropna(subset=[COL_PRAZO])
+        
+        # 3. Extrair a Cidade do Endereço de Entrega
+        df_pendentes['Cidade'] = df_pendentes[COL_ENDERECO].apply(extrair_cidade)
+        
+        # 4. Ordenação: Da data mais próxima para a mais distante
+        df_pendentes = df_pendentes.sort_values(by=COL_PRAZO, ascending=True)
+        
+        # --- FILTRO PARA A SEMANA ---
+        st.markdown("### Filtros de Visualização")
+        mostrar_so_semana = st.toggle("📅 Mostrar apenas ocorrências com prazo para os próximos 7 dias", value=False)
+        
+        if mostrar_so_semana:
+            hoje = datetime.now()
+            daqui_uma_semana = hoje + timedelta(days=7)
+            # Filtra do dia de hoje até daqui 7 dias (incluindo as atrasadas)
+            df_pendentes = df_pendentes[df_pendentes[COL_PRAZO] <= daqui_uma_semana]
+        
+        # Formata a data para visualização amigável
+        df_pendentes['Prazo Formatado'] = df_pendentes[COL_PRAZO].dt.strftime('%d/%m/%Y %H:%M')
+        
+        # Seleciona apenas as colunas práticas para exibir na tela
+        df_exibicao = df_pendentes[[
+            COL_OCORRENCIA, 
+            COL_CLIENTE, 
+            'Cidade', 
+            'Prazo Formatado'
+        ]]
+        
+        # --- MÉTRICAS DE RESUMO ---
+        st.write("---")
+        col_m1, col_m2, col_m3 = st.columns(3)
+        with col_m1:
+            st.metric("Visitas Pendentes (Filtro Atual)", len(df_exibicao))
+        with col_m2:
+            st.metric("Cidades na Rota", df_exibicao['Cidade'].nunique())
+        with col_m3:
+            mais_urgente = df_exibicao['Prazo Formatado'].iloc[0] if not df_exibicao.empty else "-"
+            st.metric("Próximo Vencimento", mais_urgente)
+        
+        st.write("---")
+        
+        # --- TABELA DE DADOS INTERATIVA ---
+        st.markdown("**Lista de Ocorrências Ordenadas:**")
+        
+        if df_exibicao.empty:
+            st.success("✅ Excelente! Não há nenhuma ocorrência pendente no período selecionado.")
+        else:
+            # Garante que o número da ocorrência seja exibido sem casas decimais (.0)
+            df_exibicao[COL_OCORRENCIA] = df_exibicao[COL_OCORRENCIA].astype(int).astype(str)
+            
+            st.dataframe(
+                df_exibicao,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small"),
+                    COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large"),
+                    'Cidade': st.column_config.TextColumn("Cidade", width="medium"),
+                    'Prazo Formatado': st.column_config.TextColumn("Prazo de Atendimento", width="medium"),
                 }
-                st.session_state.equipamentos.append(item_dict)
-                st.success("Adicionado!")
-            except ValueError:
-                st.error("Informe um valor numérico válido para a vazão.")
-        else:
-            st.warning("Preencha o equipamento e a vazão.")
+            )
 
-if st.session_state.equipamentos:
-    st.write("**Lista de Equipamentos Cadastrados:**")
-    total_vazao = 0.0
-    
-    for idx, item in enumerate(st.session_state.equipamentos):
-        total_vazao += item["vazao_total_item"]
-        
-        c_txt, c_del = st.columns([5, 1])
-        c_txt.text(item["texto"])
-        if c_del.button("❌", key=f"del_{idx}_{rc}"):
-            st.session_state.equipamentos.pop(idx)
-            st.rerun()
+    except Exception as e:
+        st.error(f"⚠️ Ocorreu um erro ao processar o arquivo. Certifique-se de ser o relatório padrão do sistema. Erro técnico: {e}")
 
-    vazao_total_str = f"{total_vazao:.2f}".replace(".", ",").rstrip("0").rstrip(",")
-    st.markdown(f"**VAZÃO TOTAL: {vazao_total_str} kg/h**")
+else:
+    st.info("👆 Por favor, faça o upload da planilha atualizada de ocorrências acima para visualizar a agenda.")
 
 st.divider()
 
-# --- SEÇÃO 4: GERAÇÃO DO RELATÓRIO PDF ---
-class RelatorioPDF(FPDF):
-    def __init__(self, cod_cliente="", nome_cliente=""):
-        super().__init__()
-        self.cod_cliente = cod_cliente.replace(".", "").strip().upper() if cod_cliente else ""
-        self.nome_cliente = nome_cliente.strip().upper() if nome_cliente else ""
+# --- BOTÃO FLUTUANTE DE REFRESH ---
+col_btn1, col_btn2 = st.columns([1, 5])
+with col_btn1:
+    if st.button("🔄 Atualizar Tela"):
+        st.rerun()
 
-    def header(self):
-        if os.path.exists(LOGO2_PATH):
-            self.image(LOGO2_PATH, x=10, y=8, w=45)
-
-        if self.page_no() == 1:
-            self.set_y(10)
-            self.set_font("Arial", "B", 15)
-            # Título principal do PDF em Azul
-            self.set_text_color(0, 51, 160)
-            self.cell(0, 8, "RELATÓRIO DE FOTOS", align="C", ln=1)
-            
-            info_cabecalho = f"{self.cod_cliente} | {self.nome_cliente}".strip(" |")
-            if info_cabecalho:
-                self.set_font("Arial", "B", 11)
-                self.set_text_color(0, 0, 0)
-                self.cell(0, 6, info_cabecalho, align="C", ln=1)
-            
-            self.set_y(35)
-        else:
-            self.set_y(35)
-
-    def footer(self):
-        self.set_y(-15)
-        self.set_font("Arial", "I", 8)
-        self.set_text_color(128, 128, 128)
-        self.cell(0, 10, f"Página {self.page_no()}", align="C")
-
-def gerar_pdf(equipamentos, dic_fotos, cod_cliente, nome_cliente):
-    pdf = RelatorioPDF(cod_cliente, nome_cliente)
-    pdf.set_margins(10, 35, 10)
-    pdf.set_auto_page_break(auto=True, margin=20)
-
-    for categoria, arquivos in dic_fotos.items():
-        if arquivos:
-            pdf.add_page()
-            pdf.set_font("Arial", "B", 11)
-            pdf.set_text_color(0, 51, 160) # Azul Consigaz nos Títulos
-            pdf.cell(0, 6, categoria.upper(), ln=1, align="L")
-            pdf.set_text_color(0, 0, 0)
-            pdf.ln(2)
-            
-            for idx, arq in enumerate(arquivos):
-                try:
-                    img = Image.open(arq)
-                    if img.mode != "RGB":
-                        img = img.convert("RGB")
-                    
-                    temp_path = f"temp_{categoria}_{idx}.jpg"
-                    img.save(temp_path)
-                    
-                    pdf.image(temp_path, x="C", w=130)
-                    pdf.ln(3)
-                    
-                    if os.path.exists(temp_path):
-                        os.remove(temp_path)
-                except Exception as e:
-                    pdf.cell(0, 6, f"Erro ao processar imagem: {e}", ln=1, align="L")
-
-    if equipamentos:
-        pdf.add_page()
-        pdf.set_font("Arial", "B", 11)
-        pdf.set_text_color(0, 51, 160)
-        pdf.cell(0, 6, "LISTA DE EQUIPAMENTOS E VAZÕES", ln=1, align="L")
-        pdf.set_text_color(0, 0, 0)
-        pdf.ln(2)
-        
-        pdf.set_font("Arial", "B", 10)
-        pdf.set_fill_color(0, 51, 160) # Azul no cabeçalho da tabela
-        pdf.set_text_color(255, 255, 255) # Texto branco
-        pdf.cell(20, 7, "QTD", border=1, align="C", fill=True)
-        pdf.cell(120, 7, "EQUIPAMENTO", border=1, align="C", fill=True)
-        pdf.cell(50, 7, "VAZÃO TOTAL (KG/H)", border=1, align="C", fill=True, ln=1)
-        
-        pdf.set_font("Arial", "", 10)
-        pdf.set_text_color(0, 0, 0)
-        total_vazao = 0.0
-        for item in equipamentos:
-            total_vazao += item["vazao_total_item"]
-            vazao_item_str = f"{item['vazao_total_item']:.2f}".replace(".", ",").rstrip("0").rstrip(",")
-            if not vazao_item_str or vazao_item_str == ",":
-                vazao_item_str = "0"
-            
-            pdf.cell(20, 6, f"{item['qtd']:02d}", border=1, align="C")
-            pdf.cell(120, 6, f"{item['nome']}", border=1, align="L")
-            pdf.cell(50, 6, f"{vazao_item_str} kg/h", border=1, align="C", ln=1)
-        
-        vazao_total_str = f"{total_vazao:.2f}".replace(".", ",").rstrip("0").rstrip(",")
-        if not vazao_total_str or vazao_total_str == ",":
-            vazao_total_str = "0"
-
-        pdf.set_font("Arial", "B", 10)
-        pdf.set_fill_color(240, 240, 240)
-        pdf.cell(140, 7, "VAZÃO TOTAL:", border=1, align="R", fill=True)
-        pdf.cell(50, 7, f"{vazao_total_str} kg/h", border=1, align="C", fill=True, ln=1)
-
-    if pdf.page_no() == 0:
-        pdf.add_page()
-
-    return bytes(pdf.output())
-
-st.subheader("4. Geração do Relatório")
-
-if st.button("📄 Gerar Relatório PDF"):
-    dicionario_fotos = {
-        "FACHADA": fotos_fachada,
-        "ABRIGO": fotos_abrigo,
-        "CENTRAL": fotos_central,
-        "CILINDROS": fotos_cilindros,
-        "EQUIPAMENTOS": fotos_equipamentos
-    }
-    
-    pdf_out = gerar_pdf(
-        st.session_state.equipamentos,
-        dicionario_fotos,
-        cod_cliente,
-        nome_cliente
-    )
-    
-    cod_formatado = cod_cliente.replace(".", "").strip().upper() if cod_cliente else ""
-    nome_arquivo_pdf = f"fotos_{cod_formatado}.pdf" if cod_formatado else "fotos.pdf"
-
-    st.success("✅ Relatório gerado com sucesso!")
-    st.download_button(
-        label="📥 Baixar Relatório (PDF)",
-        data=pdf_out,
-        file_name=nome_arquivo_pdf,
-        mime="application/pdf"
-    )
+```
