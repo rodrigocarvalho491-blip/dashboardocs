@@ -33,37 +33,28 @@ def extrair_cidade(endereco):
         return cidade.title()
     return s.title()
 
-# Função para classificar o status com base na data de abertura e prazo
+# Função para classificar o status baseada na regressiva até o prazo
 def classificar_status(row):
     prazo = row['Prazo_DT']
-    abertura = row['Abertura_DT']
-    
     if pd.isna(prazo):
         return "🟢 1ª Semana"
     
     hoje = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     prazo_dia = prazo.replace(hour=0, minute=0, second=0, microsecond=0)
     
-    # Vence Hoje
-    if prazo_dia == hoje:
-        return "🔵 Vence Hoje"
-    # Vencido (prazo anterior a hoje)
-    elif prazo_dia < hoje:
+    # Diferença em dias entre hoje e o prazo
+    dias_restantes = (prazo_dia - hoje).days
+    
+    if dias_restantes < 0:
         return "🔴 Vencido"
-    
-    # Se não venceu, calcula a semana a partir da data de abertura
-    if pd.isna(abertura):
-        return "🟢 1ª Semana"
-        
-    abertura_dia = abertura.replace(hour=0, minute=0, second=0, microsecond=0)
-    delta_dias = (prazo_dia - abertura_dia).days
-    
-    if delta_dias <= 7:
-        return "🟢 1ª Semana"
-    elif delta_dias <= 14:
-        return "🟡 2ª Semana"
+    elif dias_restantes == 0:
+        return "🔵 Vence Hoje"
+    elif dias_restantes <= 7:
+        return "🔴 3ª Semana" # Semana do vencimento
+    elif dias_restantes <= 14:
+        return "🟡 2ª Semana" # Semana intermediária
     else:
-        return "🔴 3ª Semana+"
+        return "🟢 1ª Semana" # Semana mais distante
 
 # --- CABEÇALHO DO APP COM LOGO ---
 col_logo, col_titulo = st.columns([1, 4])
@@ -114,10 +105,14 @@ if arquivo_excel is not None:
         # Garante que a coluna de Sub-Classificação está tratada como texto
         df_pendentes[COL_SUB_CLASSIF] = df_pendentes[COL_SUB_CLASSIF].fillna("-").astype(str)
         
-        # 4. CRIAR COLUNA DE ALERTA DE PRAZO (Baseado nas semanas e hoje)
+        # 4. Cálculo da regressiva em dias para o prazo de atendimento
+        hoje = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        df_pendentes['Dias Restantes'] = (df_pendentes['Prazo_DT'].dt.normalize() - hoje).dt.days
+        
+        # 5. CRIAR COLUNA DE ALERTA DE PRAZO (Com a nova lógica de semanas)
         df_pendentes['Status Prazo'] = df_pendentes.apply(classificar_status, axis=1)
         
-        # 5. ORDENAÇÃO OBRIGATÓRIA: Da data mais próxima para a mais distante
+        # 6. ORDENAÇÃO OBRIGATÓRIA: Da data mais próxima para a mais distante
         df_pendentes = df_pendentes.sort_values(by='Prazo_DT', ascending=True)
         
         # --- SEÇÃO 2: PAINEL DE OCORRÊNCIAS (DASHBOARD GERAL) ---
@@ -130,7 +125,7 @@ if arquivo_excel is not None:
         with col_t1:
             mostrar_so_hoje = st.toggle("📅 Mostrar apenas ocorrências com prazo PARA HOJE", value=False)
         with col_t2:
-            mostrar_so_semana = st.toggle("🗓️️ Mostrar apenas os próximos 7 dias", value=False)
+            mostrar_so_semana = st.toggle("🗓️ Mostrar apenas os próximos 7 dias", value=False)
         
         cidades_unicas = sorted(list(df_pendentes['Cidade'].unique()))
         sub_class_unicas = sorted(list(df_pendentes[COL_SUB_CLASSIF].unique()))
@@ -162,9 +157,10 @@ if arquivo_excel is not None:
         # Formata a data para exibir APENAS A DATA (sem horário)
         df_filtrado['Data Atendimento'] = df_filtrado['Prazo_DT'].dt.strftime('%d/%m/%Y')
         
-        # Seleção das colunas principais para a tabela
+        # Seleção das colunas principais para a tabela (com Dias Restantes)
         df_exibicao = df_filtrado[[
             'Status Prazo',
+            'Dias Restantes',
             COL_OCORRENCIA, 
             COL_CLIENTE, 
             'Cidade', 
@@ -199,6 +195,7 @@ if arquivo_excel is not None:
                 hide_index=True,
                 column_config={
                     'Status Prazo': st.column_config.TextColumn("Status", width="small"),
+                    'Dias Restantes': st.column_config.NumberColumn("Dias Restantes", width="small"),
                     COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small"),
                     COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large"),
                     'Cidade': st.column_config.TextColumn("Cidade", width="small"),
@@ -221,6 +218,7 @@ if arquivo_excel is not None:
             df_comodato['Data Atendimento'] = df_comodato['Prazo_DT'].dt.strftime('%d/%m/%Y')
             df_comodato_exibicao = df_comodato[[
                 'Status Prazo',
+                'Dias Restantes',
                 COL_OCORRENCIA, 
                 COL_CLIENTE, 
                 'Cidade', 
@@ -237,6 +235,7 @@ if arquivo_excel is not None:
                 hide_index=True,
                 column_config={
                     'Status Prazo': st.column_config.TextColumn("Status", width="small"),
+                    'Dias Restantes': st.column_config.NumberColumn("Dias Restantes", width="small"),
                     COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small"),
                     COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large"),
                     'Cidade': st.column_config.TextColumn("Cidade", width="small"),
