@@ -14,6 +14,7 @@ st.set_page_config(page_title="Dashboard de Ocorrências", page_icon="📊", lay
 COL_OCORRENCIA = "Número da ocorrência"
 COL_CLIENTE = "Nome do cliente"
 COL_ENDERECO = "Endereço de Entrega"
+COL_ABERTURA = "Data/Hora de abertura"
 COL_PRAZO = "Prazo de Atendimento"
 COL_FECHAMENTO = "Data/Hora de fechamento" # Usado para desconsiderar as já tratadas
 COL_SUB_CLASSIF = "Subclassificação Ocorrência"
@@ -32,22 +33,37 @@ def extrair_cidade(endereco):
         return cidade.title()
     return s.title()
 
-# Função para classificar o status do prazo em relação a hoje
-def classificar_status(data_prazo):
-    if pd.isna(data_prazo):
-        return "Normal"
+# Função para classificar o status com base na data de abertura e prazo
+def classificar_status(row):
+    prazo = row['Prazo_DT']
+    abertura = row['Abertura_DT']
+    
+    if pd.isna(prazo):
+        return "🟢 1ª Semana"
     
     hoje = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    prazo_dia = data_prazo.replace(hour=0, minute=0, second=0, microsecond=0)
+    prazo_dia = prazo.replace(hour=0, minute=0, second=0, microsecond=0)
     
+    # Vence Hoje
+    if prazo_dia == hoje:
+        return "🔵 Vence Hoje"
     # Vencido (prazo anterior a hoje)
-    if prazo_dia < hoje:
+    elif prazo_dia < hoje:
         return "🔴 Vencido"
-    # Vence nos próximos 7 dias (incluindo hoje)
-    elif hoje <= prazo_dia <= (hoje + timedelta(days=7)):
-        return "🟡 Vence na Semana"
+    
+    # Se não venceu, calcula a semana a partir da data de abertura
+    if pd.isna(abertura):
+        return "🟢 1ª Semana"
+        
+    abertura_dia = abertura.replace(hour=0, minute=0, second=0, microsecond=0)
+    delta_dias = (prazo_dia - abertura_dia).days
+    
+    if delta_dias <= 7:
+        return "🟢 1ª Semana"
+    elif delta_dias <= 14:
+        return "🟡 2ª Semana"
     else:
-        return "🟢 No Prazo"
+        return "🔴 3ª Semana+"
 
 # --- CABEÇALHO DO APP COM LOGO ---
 col_logo, col_titulo = st.columns([1, 4])
@@ -85,11 +101,12 @@ if arquivo_excel is not None:
         # 1. Filtro base: Desconsiderar ocorrências que já possuem tratativa (Data de fechamento preenchida)
         df_pendentes = df[df[COL_FECHAMENTO].isna()].copy()
         
-        # 2. Tratamento da coluna de Prazo de Atendimento para o formato de Data
-        df_pendentes[COL_PRAZO] = pd.to_datetime(df_pendentes[COL_PRAZO], format="%d/%m/%Y %H:%M", errors='coerce')
+        # 2. Tratamento das colunas de Data para o formato datetime
+        df_pendentes['Prazo_DT'] = pd.to_datetime(df_pendentes[COL_PRAZO], format="%d/%m/%Y %H:%M", errors='coerce')
+        df_pendentes['Abertura_DT'] = pd.to_datetime(df_pendentes[COL_ABERTURA], format="%d/%m/%Y %H:%M", errors='coerce')
         
         # Remove linhas onde o prazo não pôde ser lido
-        df_pendentes = df_pendentes.dropna(subset=[COL_PRAZO])
+        df_pendentes = df_pendentes.dropna(subset=['Prazo_DT'])
         
         # 3. Extrair apenas o nome da Cidade do Endereço de Entrega
         df_pendentes['Cidade'] = df_pendentes[COL_ENDERECO].apply(extrair_cidade)
@@ -97,11 +114,11 @@ if arquivo_excel is not None:
         # Garante que a coluna de Sub-Classificação está tratada como texto
         df_pendentes[COL_SUB_CLASSIF] = df_pendentes[COL_SUB_CLASSIF].fillna("-").astype(str)
         
-        # 4. CRIAR COLUNA DE ALERTA DE PRAZO
-        df_pendentes['Status Prazo'] = df_pendentes[COL_PRAZO].apply(classificar_status)
+        # 4. CRIAR COLUNA DE ALERTA DE PRAZO (Baseado nas semanas e hoje)
+        df_pendentes['Status Prazo'] = df_pendentes.apply(classificar_status, axis=1)
         
-        # 5. ORDENAÇÃO OBRIGATÓRIA: Da data mais próxima para a mais distante (do dia/atrasadas para o futuro)
-        df_pendentes = df_pendentes.sort_values(by=COL_PRAZO, ascending=True)
+        # 5. ORDENAÇÃO OBRIGATÓRIA: Da data mais próxima para a mais distante
+        df_pendentes = df_pendentes.sort_values(by='Prazo_DT', ascending=True)
         
         # --- SEÇÃO 2: PAINEL DE OCORRÊNCIAS (DASHBOARD GERAL) ---
         st.subheader("2. Agenda Geral de Visitas Pendentes")
@@ -113,7 +130,7 @@ if arquivo_excel is not None:
         with col_t1:
             mostrar_so_hoje = st.toggle("📅 Mostrar apenas ocorrências com prazo PARA HOJE", value=False)
         with col_t2:
-            mostrar_so_semana = st.toggle("🗓️ Mostrar apenas os próximos 7 dias", value=False)
+            mostrar_so_semana = st.toggle("🗓️️ Mostrar apenas os próximos 7 dias", value=False)
         
         cidades_unicas = sorted(list(df_pendentes['Cidade'].unique()))
         sub_class_unicas = sorted(list(df_pendentes[COL_SUB_CLASSIF].unique()))
@@ -130,11 +147,11 @@ if arquivo_excel is not None:
         if mostrar_so_hoje:
             hoje_inicio = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
             hoje_fim = hoje_inicio + timedelta(days=1) - timedelta(seconds=1)
-            df_filtrado = df_filtrado[(df_filtrado[COL_PRAZO] >= hoje_inicio) & (df_filtrado[COL_PRAZO] <= hoje_fim)]
+            df_filtrado = df_filtrado[(df_filtrado['Prazo_DT'] >= hoje_inicio) & (df_filtrado['Prazo_DT'] <= hoje_fim)]
         elif mostrar_so_semana:
             hoje = datetime.now()
             daqui_uma_semana = hoje + timedelta(days=7)
-            df_filtrado = df_filtrado[df_filtrado[COL_PRAZO] <= daqui_uma_semana]
+            df_filtrado = df_filtrado[df_filtrado['Prazo_DT'] <= daqui_uma_semana]
             
         if cidades_selecionadas:
             df_filtrado = df_filtrado[df_filtrado['Cidade'].isin(cidades_selecionadas)]
@@ -142,17 +159,17 @@ if arquivo_excel is not None:
         if sub_class_selecionadas:
             df_filtrado = df_filtrado[df_filtrado[COL_SUB_CLASSIF].isin(sub_class_selecionadas)]
         
-        # Formata a data para visualização amigável
-        df_filtrado['Prazo Formatado'] = df_filtrado[COL_PRAZO].dt.strftime('%d/%m/%Y %H:%M')
+        # Formata a data para exibir APENAS A DATA (sem horário)
+        df_filtrado['Data Atendimento'] = df_filtrado['Prazo_DT'].dt.strftime('%d/%m/%Y')
         
-        # Seleção das colunas principais para a tabela (com o Status de Alerta na frente)
+        # Seleção das colunas principais para a tabela
         df_exibicao = df_filtrado[[
             'Status Prazo',
             COL_OCORRENCIA, 
             COL_CLIENTE, 
             'Cidade', 
             COL_SUB_CLASSIF,
-            'Prazo Formatado'
+            'Data Atendimento'
         ]]
         
         # Métricas de Resumo
@@ -160,13 +177,13 @@ if arquivo_excel is not None:
         with col_m1:
             st.metric("Visitas Pendentes", len(df_exibicao))
         with col_m2:
+            hoje_qt = len(df_exibicao[df_exibicao['Status Prazo'] == "🔵 Vence Hoje"])
+            st.metric("Vence Hoje", hoje_qt)
+        with col_m3:
             vencidas_qt = len(df_exibicao[df_exibicao['Status Prazo'] == "🔴 Vencido"])
             st.metric("Ocorrências Vencidas", vencidas_qt)
-        with col_m3:
-            semana_qt = len(df_exibicao[df_exibicao['Status Prazo'] == "🟡 Vence na Semana"])
-            st.metric("Vencem na Semana", semana_qt)
         with col_m4:
-            mais_urgente = df_exibicao['Prazo Formatado'].iloc[0] if not df_exibicao.empty else "-"
+            mais_urgente = df_exibicao['Data Atendimento'].iloc[0] if not df_exibicao.empty else "-"
             st.metric("Próximo Vencimento", mais_urgente)
         
         st.write("---")
@@ -181,12 +198,12 @@ if arquivo_excel is not None:
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    'Status Prazo': st.column_config.TextColumn("Alerta", width="small"),
+                    'Status Prazo': st.column_config.TextColumn("Status", width="small"),
                     COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small"),
                     COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large"),
                     'Cidade': st.column_config.TextColumn("Cidade", width="small"),
                     COL_SUB_CLASSIF: st.column_config.TextColumn("Sub-Classificação", width="medium"),
-                    'Prazo Formatado': st.column_config.TextColumn("Prazo de Atendimento", width="medium"),
+                    'Data Atendimento': st.column_config.TextColumn("Data de Atendimento", width="medium"),
                 }
             )
 
@@ -201,14 +218,14 @@ if arquivo_excel is not None:
         if df_comodato.empty:
             st.info("ℹ️ Não foram encontradas ocorrências pendentes com a sub-classificação 'Comodato Inativo' no ficheiro enviado.")
         else:
-            df_comodato['Prazo Formatado'] = df_comodato[COL_PRAZO].dt.strftime('%d/%m/%Y %H:%M')
+            df_comodato['Data Atendimento'] = df_comodato['Prazo_DT'].dt.strftime('%d/%m/%Y')
             df_comodato_exibicao = df_comodato[[
                 'Status Prazo',
                 COL_OCORRENCIA, 
                 COL_CLIENTE, 
                 'Cidade', 
                 COL_SUB_CLASSIF,
-                'Prazo Formatado'
+                'Data Atendimento'
             ]]
             df_comodato_exibicao[COL_OCORRENCIA] = df_comodato_exibicao[COL_OCORRENCIA].astype(int).astype(str)
 
@@ -219,12 +236,12 @@ if arquivo_excel is not None:
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    'Status Prazo': st.column_config.TextColumn("Alerta", width="small"),
+                    'Status Prazo': st.column_config.TextColumn("Status", width="small"),
                     COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small"),
                     COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large"),
                     'Cidade': st.column_config.TextColumn("Cidade", width="small"),
                     COL_SUB_CLASSIF: st.column_config.TextColumn("Sub-Classificação", width="medium"),
-                    'Prazo Formatado': st.column_config.TextColumn("Prazo de Atendimento", width="medium"),
+                    'Data Atendimento': st.column_config.TextColumn("Data de Atendimento", width="medium"),
                 }
             )
 
