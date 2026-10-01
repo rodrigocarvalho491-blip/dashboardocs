@@ -33,18 +33,19 @@ def extrair_cidade(endereco):
         return cidade.title()
     return s.title()
 
-# Função para classificar o status baseada na regressiva até o prazo
-def classificar_status(row):
-    prazo = row['Prazo_DT']
-    if pd.isna(prazo):
-        return "🟢 1ª Semana"
-    
-    hoje = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    prazo_dia = prazo.replace(hour=0, minute=0, second=0, microsecond=0)
-    
-    # Diferença em dias entre hoje e o prazo
-    dias_restantes = (prazo_dia - hoje).days
-    
+# Função de status para a planilha geral
+def classificar_status_geral(dias_restantes):
+    if dias_restantes < 0:
+        return "🔴 Vencido"
+    elif dias_restantes == 0:
+        return "🔵 Vence Hoje"
+    elif 1 <= dias_restantes <= 7:
+        return "🟡 Vence na Semana"
+    else:
+        return "🟢 No Prazo"
+
+# Função de status específica para comodatos (semanas regressivas até o prazo)
+def classificar_status_comodato(dias_restantes):
     if dias_restantes < 0:
         return "🔴 Vencido"
     elif dias_restantes == 0:
@@ -109,8 +110,9 @@ if arquivo_excel is not None:
         hoje = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         df_pendentes['Dias Restantes'] = (df_pendentes['Prazo_DT'].dt.normalize() - hoje).dt.days
         
-        # 5. CRIAR COLUNA DE ALERTA DE PRAZO (Com a nova lógica de semanas)
-        df_pendentes['Status Prazo'] = df_pendentes.apply(classificar_status, axis=1)
+        # 5. Aplicar status específico para a geral e para comodato
+        df_pendentes['Status Geral'] = df_pendentes['Dias Restantes'].apply(classificar_status_geral)
+        df_pendentes['Status Comodato'] = df_pendentes['Dias Restantes'].apply(classificar_status_comodato)
         
         # 6. ORDENAÇÃO OBRIGATÓRIA: Da data mais próxima para a mais distante
         df_pendentes = df_pendentes.sort_values(by='Prazo_DT', ascending=True)
@@ -157,9 +159,9 @@ if arquivo_excel is not None:
         # Formata a data para exibir APENAS A DATA (sem horário)
         df_filtrado['Data Atendimento'] = df_filtrado['Prazo_DT'].dt.strftime('%d/%m/%Y')
         
-        # Seleção das colunas principais para a tabela (com Dias Restantes)
+        # Seleção das colunas principais para a tabela geral
         df_exibicao = df_filtrado[[
-            'Status Prazo',
+            'Status Geral',
             'Dias Restantes',
             COL_OCORRENCIA, 
             COL_CLIENTE, 
@@ -173,10 +175,10 @@ if arquivo_excel is not None:
         with col_m1:
             st.metric("Visitas Pendentes", len(df_exibicao))
         with col_m2:
-            hoje_qt = len(df_exibicao[df_exibicao['Status Prazo'] == "🔵 Vence Hoje"])
+            hoje_qt = len(df_exibicao[df_exibicao['Status Geral'] == "🔵 Vence Hoje"])
             st.metric("Vence Hoje", hoje_qt)
         with col_m3:
-            vencidas_qt = len(df_exibicao[df_exibicao['Status Prazo'] == "🔴 Vencido"])
+            vencidas_qt = len(df_exibicao[df_exibicao['Status Geral'] == "🔴 Vencido"])
             st.metric("Ocorrências Vencidas", vencidas_qt)
         with col_m4:
             mais_urgente = df_exibicao['Data Atendimento'].iloc[0] if not df_exibicao.empty else "-"
@@ -194,7 +196,7 @@ if arquivo_excel is not None:
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    'Status Prazo': st.column_config.TextColumn("Status", width="small"),
+                    'Status Geral': st.column_config.TextColumn("Status", width="small"),
                     'Dias Restantes': st.column_config.NumberColumn("Dias Restantes", width="small"),
                     COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small"),
                     COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large"),
@@ -208,16 +210,16 @@ if arquivo_excel is not None:
 
         # --- SEÇÃO 3: RELATÓRIO SEPARADO DE COMODATO INATIVO ---
         st.subheader("3. Relatório Específico: Comodato Inativo")
-        st.markdown("Separação exclusiva das ocorrências de **Comodato Inativo** ordenadas por prazo para planeamento de recolha/visitas.")
+        st.markdown("Separação exclusiva das ocorrências de **Comodato Inativo** com contagem regressiva em semanas (1ª, 2ª e 3ª semana).")
 
         df_comodato = df_pendentes[df_pendentes[COL_SUB_CLASSIF].str.contains("Comodato Inativo", case=False, na=False)].copy()
 
         if df_comodato.empty:
-            st.info("ℹ️ Não foram encontradas ocorrências pendentes com a sub-classificação 'Comodato Inativo' no ficheiro enviado.")
+            st.info("ℹ️️ Não foram encontradas ocorrências pendentes com a sub-classificação 'Comodato Inativo' no ficheiro enviado.")
         else:
             df_comodato['Data Atendimento'] = df_comodato['Prazo_DT'].dt.strftime('%d/%m/%Y')
             df_comodato_exibicao = df_comodato[[
-                'Status Prazo',
+                'Status Comodato',
                 'Dias Restantes',
                 COL_OCORRENCIA, 
                 COL_CLIENTE, 
@@ -234,7 +236,7 @@ if arquivo_excel is not None:
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    'Status Prazo': st.column_config.TextColumn("Status", width="small"),
+                    'Status Comodato': st.column_config.TextColumn("Status Semanal", width="small"),
                     'Dias Restantes': st.column_config.NumberColumn("Dias Restantes", width="small"),
                     COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small"),
                     COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large"),
