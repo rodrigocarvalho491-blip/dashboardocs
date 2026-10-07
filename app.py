@@ -199,3 +199,122 @@ if arquivo_excel is not None:
         
         if df_filtrado.empty:
             st.success("✅ Excelente! Não há nenhuma ocorrência pendente para os filtros selecionados.")
+        else:
+            df_exibicao = df_filtrado[[
+                'Status Geral',
+                'Dias Úteis Restantes',
+                COL_OCORRENCIA, 
+                COL_CLIENTE, 
+                'Cidade', 
+                COL_SUB_CLASSIF,
+                'Data Atendimento'
+            ]].copy()
+            df_exibicao[COL_OCORRENCIA] = df_exibicao[COL_OCORRENCIA].astype(str)
+            
+            edited_df = st.data_editor(
+                df_exibicao.assign(Tratar=False),
+                column_config={
+                    "Tratar": st.column_config.CheckboxColumn("✅ Marcar Tratada?", required=True),
+                    'Status Geral': st.column_config.TextColumn("Status", width="small", disabled=True),
+                    'Dias Úteis Restantes': st.column_config.NumberColumn("Dias Úteis Restantes", width="small", disabled=True),
+                    COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small", disabled=True),
+                    COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large", disabled=True),
+                    'Cidade': st.column_config.TextColumn("Cidade", width="small", disabled=True),
+                    COL_SUB_CLASSIF: st.column_config.TextColumn("Sub-Classificação", width="medium", disabled=True),
+                    'Data Atendimento': st.column_config.TextColumn("Data de Atendimento", width="medium", disabled=True),
+                },
+                hide_index=True,
+                use_container_width=True,
+                key="editor_geral"
+            )
+            
+            ocorrencias_para_tratar = edited_df[edited_df["Tratar"] == True][COL_OCORRENCIA].tolist()
+            
+            if ocorrencias_para_tratar:
+                st.warning(f"⚠️ Você selecionou **{len(ocorrencias_para_tratar)}** ocorrência(s) para marcar como tratada(s).")
+                if st.button("🔒 Confirmar e Remover do Painel", type="primary"):
+                    for oc in ocorrencias_para_tratar:
+                        st.session_state.tratadas_manualmente.add(int(oc))
+                    st.success("✅ Ocorrência(s) tratada(s) com sucesso e removida(s) do painel!")
+                    st.rerun()
+
+        st.divider()
+
+        # --- SEÇÃO 3: RELATÓRIO SEPARADO DE COMODATO INATIVO ---
+        st.subheader("3. Relatório Específico: Comodato Inativo")
+        st.markdown("Separação exclusiva das ocorrências de **Comodato Inativo** com contagem regressiva em dias úteis e semanas.")
+
+        df_comodato = df_pendentes[df_pendentes[COL_SUB_CLASSIF].str.contains("Comodato Inativo", case=False, na=False)].copy()
+
+        if df_comodato.empty:
+            st.info("ℹ️ Não foram encontradas ocorrências pendentes com a sub-classificação 'Comodato Inativo' no ficheiro enviado.")
+        else:
+            df_comodato['Data Atendimento'] = df_comodato['Prazo_DT'].dt.strftime('%d/%m/%Y')
+            
+            df_comodato_exibicao = df_comodato[[
+                'Status Comodato',
+                'Dias Úteis Restantes',
+                COL_OCORRENCIA, 
+                COL_CLIENTE, 
+                'Cidade', 
+                COL_SUB_CLASSIF,
+                'Data Atendimento'
+            ]].copy()
+            df_comodato_exibicao[COL_OCORRENCIA] = df_comodato_exibicao[COL_OCORRENCIA].astype(str)
+
+            st.metric("Total de Comodatos Inativos Pendentes", len(df_comodato_exibicao))
+            
+            edited_comodato = st.data_editor(
+                df_comodato_exibicao.assign(Tratar=False),
+                column_config={
+                    "Tratar": st.column_config.CheckboxColumn("✅ Marcar Tratada?", required=True),
+                    'Status Comodato': st.column_config.TextColumn("Status Semanal", width="small", disabled=True),
+                    'Dias Úteis Restantes': st.column_config.NumberColumn("Dias Úteis Restantes", width="small", disabled=True),
+                    COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small", disabled=True),
+                    COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large", disabled=True),
+                    'Cidade': st.column_config.TextColumn("Cidade", width="small", disabled=True),
+                    COL_SUB_CLASSIF: st.column_config.TextColumn("Sub-Classificação", width="medium", disabled=True),
+                    'Data Atendimento': st.column_config.TextColumn("Data de Atendimento", width="medium", disabled=True),
+                },
+                hide_index=True,
+                use_container_width=True,
+                key="editor_comodato"
+            )
+            
+            comodatos_para_tratar = edited_comodato[edited_comodato["Tratar"] == True][COL_OCORRENCIA].tolist()
+            if comodatos_para_tratar:
+                st.warning(f"⚠️ Você selecionou **{len(comodatos_para_tratar)}** comodato(s) inativo(s) para tratar.")
+                if st.button("🔒 Confirmar Tratativa de Comodato", type="primary", key="btn_comodato"):
+                    for oc in comodatos_para_tratar:
+                        st.session_state.tratadas_manualmente.add(int(oc))
+                    st.success("✅ Comodato(s) tratado(s) com sucesso e removido(s) do painel!")
+                    st.rerun()
+
+            st.write("")
+            df_comodato_download = df_comodato_exibicao.copy()
+            
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df_comodato_download.to_excel(writer, index=False, sheet_name='Comodato Inativo')
+            processed_data = output.getvalue()
+
+            st.download_button(
+                label="📥 Baixar Planilha Separada (Comodato Inativo)",
+                data=processed_data,
+                file_name="comodatos_inativos_pendentes.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+    except Exception as e:
+        st.error(f"⚠️ Ocorreu um erro ao processar o ficheiro. Certifique-se de ser o relatório padrão do sistema. Erro técnico: {e}")
+
+else:
+    st.info("👆 Por favor, faça o upload da folha de cálculo atualizada de ocorrências acima para carregar o dashboard.")
+
+st.divider()
+
+# --- BOTÃO FLUTUANTE DE REFRESH ---
+col_btn1, col_btn2 = st.columns([1, 5])
+with col_btn1:
+    if st.button("🔄 Atualizar Ecrã"):
+        st.rerun()
