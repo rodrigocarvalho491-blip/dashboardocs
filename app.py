@@ -2,7 +2,6 @@ import os
 import pandas as pd
 import numpy as np
 import streamlit as st
-import plotly.express as px
 from datetime import datetime, timedelta
 from io import BytesIO
 
@@ -24,37 +23,6 @@ COL_ABERTURA = "Data/Hora de abertura"
 COL_PRAZO = "Prazo de Atendimento"
 COL_FECHAMENTO = "Data/Hora de fechamento"
 COL_SUB_CLASSIF = "Subclassificação Ocorrência"
-
-# Dicionário de coordenadas de referência para as cidades
-COORDENADAS_CIDADES = {
-    "São Paulo": {"lat": -23.5505, "lon": -46.6333},
-    "Campinas": {"lat": -22.9056, "lon": -47.0608},
-    "São José Dos Campos": {"lat": -23.1794, "lon": -45.8869},
-    "Ribeirão Preto": {"lat": -21.1775, "lon": -47.8103},
-    "Santos": {"lat": -23.9618, "lon": -46.3322},
-    "Sorocaba": {"lat": -23.5015, "lon": -47.4526},
-    "Bauru": {"lat": -22.3147, "lon": -49.0587},
-    "Jundiaí": {"lat": -23.1857, "lon": -46.8978},
-    "Piracicaba": {"lat": -22.7338, "lon": -47.6476},
-    "São José Do Rio Preto": {"lat": -20.8113, "lon": -49.3762},
-    "Taubaté": {"lat": -23.0204, "lon": -45.5567},
-    "Lorena": {"lat": -22.7342, "lon": -45.1225},
-    "Ubatuba": {"lat": -23.4337, "lon": -45.0839},
-    "Guaratinguetá": {"lat": -22.8153, "lon": -45.1956},
-    "Canoas": {"lat": -29.9199, "lon": -51.1884},
-    "Pindamonhangaba": {"lat": -22.9247, "lon": -45.4611},
-    "Cunha": {"lat": -23.1764, "lon": -44.9556},
-    "Caçapava": {"lat": -23.1022, "lon": -45.7111},
-    "Cruzeiro": {"lat": -22.5739, "lon": -44.9653},
-    "Aparecida": {"lat": -22.8483, "lon": -45.2289},
-    "Jacareí": {"lat": -23.3031, "lon": -45.9678},
-    "Tremembé": {"lat": -22.9536, "lon": -45.5519},
-    "Cachoeira Paulista": {"lat": -22.6653, "lon": -45.0042},
-    "Jambeiro": {"lat": -23.3081, "lon": -45.7725},
-    "Roseira": {"lat": -22.9039, "lon": -45.3047},
-    "Canas": {"lat": -22.7094, "lon": -45.0408},
-    "Potim": {"lat": -22.8419, "lon": -45.2575},
-}
 
 # Inicializa a memória de ocorrências tratadas manualmente na sessão do Streamlit
 if "tratadas_manualmente" not in st.session_state:
@@ -344,59 +312,21 @@ if arquivo_excel is not None:
 
         st.divider()
 
-        # --- SEÇÃO 4: LEGENDA E MINI MAPA NUMÉRICO POR CIDADE (ABAIXO DOS COMODATOS) ---
-        st.subheader("4. Distribuição Geográfica por Cidade")
-        st.markdown("Legenda e mini mapa numérico com a quantidade de ocorrências pendentes por cidade.")
+        # --- SEÇÃO 4: QUANTIDADE DE OCORRÊNCIAS POR CIDADE ---
+        st.subheader("4. Resumo de Ocorrências por Cidade")
+        st.markdown("Planilha detalhada com a contagem total de ocorrências pendentes agrupadas por cidade.")
 
         if not df_filtrado.empty:
             df_mapa_agrup = df_filtrado.groupby('Cidade').size().reset_index(name='Total Ocorrências')
-            df_mapa_agrup = df_mapa_agrup[df_mapa_agrup['Cidade'].isin(COORDENADAS_CIDADES.keys())].copy()
             df_mapa_agrup = df_mapa_agrup.sort_values(by='Total Ocorrências', ascending=False)
 
-            col_legenda, col_minimapa = st.columns(2)
-
-            with col_legenda:
-                st.markdown("##### 📋 Legenda / Quantidade por Cidade")
-                st.dataframe(
-                    df_mapa_agrup[['Cidade', 'Total Ocorrências']],
-                    hide_index=True,
-                    use_container_width=True
-                )
-
-            with col_minimapa:
-                st.markdown("##### 🗺️ Mini Mapa Numérico")
-                if not df_mapa_agrup.empty:
-                    lats, lons = [], []
-                    for _, row in df_mapa_agrup.iterrows():
-                        coord = COORDENADAS_CIDADES[row['Cidade']]
-                        lats.append(coord['lat'])
-                        lons.append(coord['lon'])
-                    
-                    df_mapa_agrup['lat'] = lats
-                    df_mapa_agrup['lon'] = lons
-                    
-                    fig = px.scatter_geo(
-                        df_mapa_agrup,
-                        lat='lat',
-                        lon='lon',
-                        size='Total Ocorrências',
-                        color='Total Ocorrências',
-                        text='Total Ocorrências',
-                        hover_name='Cidade',
-                        scope='south america',
-                        projection='natural earth',
-                        height=320
-                    )
-                    fig.update_traces(textposition='top center')
-                    fig.update_layout(
-                        margin={"r":0,"t":0,"l":0,"b":0}
-                    )
-                    
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.info("Nenhuma cidade com coordenadas cadastradas na seleção atual.")
+            st.dataframe(
+                df_mapa_agrup[['Cidade', 'Total Ocorrências']],
+                hide_index=True,
+                use_container_width=True
+            )
         else:
-            st.info("Nenhum dado disponível para exibir no mapa.")
+            st.info("Nenhum dado disponível para exibir.")
 
     except Exception as e:
         st.error(f"⚠️ Ocorreu um erro ao processar o ficheiro. Certifique-se de ser o relatório padrão do sistema. Erro técnico: {e}")
