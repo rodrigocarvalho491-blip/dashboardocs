@@ -82,7 +82,7 @@ COL_PRAZO = "Prazo de Atendimento"
 COL_FECHAMENTO = "Data/Hora de fechamento"
 COL_SUB_CLASSIF = "Subclassificação Ocorrência"
 
-# Base de coordenadas aproximadas para cidades padrão (Exemplo para o estado de SP / Brasil - ajuste conforme sua operação)
+# Base de coordenadas aproximadas para cidades padrão
 COORDENADAS_CIDADES = {
     "São Paulo": {"lat": -23.5505, "lon": -46.6333},
     "Campinas": {"lat": -22.9056, "lon": -47.0608},
@@ -96,7 +96,6 @@ COORDENADAS_CIDADES = {
     "São José Do Rio Preto": {"lat": -20.8113, "lon": -49.3762},
 }
 
-# Coordenada padrão (Fallback centralizado, ex: São Paulo) se a cidade não estiver no dicionário
 COORD_DEFAULT = {"lat": -23.5505, "lon": -46.6333}
 
 # Inicializa a memória de ocorrências tratadas manualmente na sessão
@@ -193,7 +192,7 @@ with st.sidebar:
     if st.button("🔄 Sincronizar / Atualizar", use_container_width=True):
         st.rerun()
         
-    st.markdown("<div style='position: fixed; bottom: 20px; font-size: 11px; color: #94A3B8;'>ERP Core v2.5.0<br>© 2026 Sistema Integrado</div>", unsafe_allow_html=True)
+    st.markdown("<div style='position: fixed; bottom: 20px; font-size: 11px; color: #94A3B8;'>ERP Core v2.5.1<br>© 2026 Sistema Integrado</div>", unsafe_allow_html=True)
 
 # --- CORPO PRINCIPAL DO SISTEMA ---
 if arquivo_excel is not None:
@@ -294,24 +293,21 @@ if arquivo_excel is not None:
             with col_map:
                 st.markdown("##### 🗺️ Distribuição Geográfica de Atendimentos")
                 if not df_filtrado.empty:
-                    # Agrupa dados por cidade para gerar a contagem no mapa
-                    df_mapa_ agrup = df_filtrado.groupby('Cidade').size().reset_index(name='TotalOcorrencias')
+                    # Correção aplicada: Variável sem espaço (df_mapa_agrup)
+                    df_mapa_agrup = df_filtrado.groupby('Cidade').size().reset_index(name='TotalOcorrencias')
                     
-                    # Associa lat/lon com base no dicionário ou fallback
                     lats, lons, sizes = [], [], []
                     for _, row in df_mapa_agrup.iterrows():
                         cidade_nome = row['Cidade']
                         coord = COORDENADAS_CIDADES.get(cidade_nome, COORD_DEFAULT)
                         lats.append(coord['lat'])
                         lons.append(coord['lon'])
-                        # Multiplicador simples para dimensionar o tamanho do ponto no st.map
                         sizes.append(max(row['TotalOcorrencias'] * 30, 100))
                     
                     df_mapa_agrup['lat'] = lats
                     df_mapa_agrup['lon'] = lons
                     df_mapa_agrup['tamanho'] = sizes
                     
-                    # Exibe o mini mapa integrado
                     st.map(df_mapa_agrup, latitude='lat', longitude='lon', size='tamanho', zoom=6, use_container_width=True)
                     st.caption("💡 *O tamanho do círculo indica o volume de ocorrências por cidade.*")
                 else:
