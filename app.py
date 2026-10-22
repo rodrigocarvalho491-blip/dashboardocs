@@ -192,7 +192,7 @@ with st.sidebar:
     if st.button("🔄 Sincronizar / Atualizar", use_container_width=True):
         st.rerun()
         
-    st.markdown("<div style='position: fixed; bottom: 20px; font-size: 11px; color: #94A3B8;'>ERP Core v2.5.1<br>© 2026 Sistema Integrado</div>", unsafe_allow_html=True)
+    st.markdown("<div style='position: fixed; bottom: 20px; font-size: 11px; color: #94A3B8;'>ERP Core v2.5.2<br>© 2026 Sistema Integrado</div>", unsafe_allow_html=True)
 
 # --- CORPO PRINCIPAL DO SISTEMA ---
 if arquivo_excel is not None:
@@ -201,7 +201,7 @@ if arquivo_excel is not None:
         
         header_row = None
         for i, row in df_raw.iterrows():
-            row_str = " ".join(row.astype(str).values)
+            row_str = " ".join([str(val) for val in row.values if pd.notna(val)])
             if "Número da ocorrência" in row_str:
                 header_row = i
                 break
@@ -293,7 +293,6 @@ if arquivo_excel is not None:
             with col_map:
                 st.markdown("##### 🗺️ Distribuição Geográfica de Atendimentos")
                 if not df_filtrado.empty:
-                    # Correção aplicada: Variável sem espaço (df_mapa_agrup)
                     df_mapa_agrup = df_filtrado.groupby('Cidade').size().reset_index(name='TotalOcorrencias')
                     
                     lats, lons, sizes = [], [], []
