@@ -16,91 +16,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- DESIGN SYSTEM: FORÇAR TEMA CLARO ABSOLUTO (LIMPEZA DE COMPONENTES) ---
-st.markdown("""
-    <style>
-        /* Fundo geral da aplicação */
-        .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stToolbar"] {
-            background-color: #FFFFFF !important;
-            color: #1E293B !important;
-        }
-
-        /* Uploader de arquivos (forçar fundo claro na dropzone) */
-        [data-testid="stFileUploader"], [data-testid="stFileUploader"] section {
-            background-color: #F8FAFC !important;
-            border: 1px solid #E2E8F0 !important;
-            border-radius: 8px !important;
-            color: #1E293B !important;
-        }
-        [data-testid="stFileUploader"] section * {
-            color: #1E293B !important;
-        }
-
-        /* Multiselects e Selectboxes */
-        div[data-baseweb="select"] > div {
-            background-color: #FFFFFF !important;
-            border-color: #CBD5E1 !important;
-            color: #1E293B !important;
-        }
-        div[data-baseweb="tag"] {
-            background-color: #E2E8F0 !important;
-            color: #1E293B !important;
-        }
-
-        /* Cartões de Métricas Executivas */
-        div.metric-container, div[data-testid="stMetric"] {
-            background-color: #F8FAFC !important;
-            border: 1px solid #E2E8F0 !important;
-            border-radius: 8px !important;
-            padding: 16px !important;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.02) !important;
-            color: #1E293B !important;
-        }
-        div[data-testid="stMetric"] label {
-            color: #64748B !important;
-        }
-        div[data-testid="stMetric"] [data-testid="stMetricValue"] {
-            color: #0F172A !important;
-        }
-
-        /* Tipografia */
-        h1, h2, h3, h4, h5, h6 {
-            color: #0F172A !important;
-            font-weight: 700 !important;
-            letter-spacing: -0.025em !important;
-        }
-        
-        p, span, label, div {
-            color: #1E293B;
-        }
-
-        /* Dataframes e Data Editors (Forçar fundo branco e cabeçalhos claros) */
-        [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
-            background-color: #FFFFFF !important;
-            border: 1px solid #E2E8F0 !important;
-            border-radius: 8px !important;
-        }
-
-        hr {
-            margin: 1.5rem 0;
-            border-color: #E2E8F0 !important;
-        }
-
-        .stButton>button {
-            background-color: #FFFFFF;
-            color: #1E293B;
-            border: 1px solid #CBD5E1;
-            border-radius: 6px;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-        .stButton>button:hover {
-            border-color: #2563EB;
-            color: #2563EB;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
 # --- MAPEAMENTO DAS COLUNAS DO SEU EXCEL ---
 COL_OCORRENCIA = "Número da ocorrência"
 COL_CLIENTE = "Nome do cliente"
@@ -470,14 +385,11 @@ if arquivo_excel is not None:
                         hover_name='Cidade',
                         scope='south america',
                         projection='natural earth',
-                        template='plotly_white',
                         height=320
                     )
                     fig.update_traces(textposition='top center')
                     fig.update_layout(
-                        margin={"r":0,"t":0,"l":0,"b":0},
-                        paper_bgcolor="#FFFFFF",
-                        plot_bgcolor="#FFFFFF"
+                        margin={"r":0,"t":0,"l":0,"b":0}
                     )
                     
                     st.plotly_chart(fig, use_container_width=True)
