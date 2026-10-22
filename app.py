@@ -389,7 +389,7 @@ if arquivo_excel is not None:
                     df_mapa_agrup['lat'] = lats
                     df_mapa_agrup['lon'] = lons
                     
-                    # Criação do mapa interativo com Plotly exibindo os números em cima dos pontos
+                    # Mapa interativo Plotly com os números exibidos sobre os pontos
                     fig = px.scatter_mapbox(
                         df_mapa_agrup,
                         lat='lat',
