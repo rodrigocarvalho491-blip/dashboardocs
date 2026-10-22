@@ -16,18 +16,18 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- DESIGN SYSTEM: FORÇAR TEMA CLARO E ESTILO CORPORATIVO LIMPO ---
+# --- DESIGN SYSTEM: FORÇAR TEMA CLARO ABSOLUTO (LIGHT MODE) ---
 st.markdown("""
     <style>
-        /* Forçar variáveis do sistema para Tema Claro (Light Mode) */
-        [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stToolbar"], .stApp {
-            background-color: #F8FAFC !important;
+        /* Forçar fundo branco e texto escuro em toda a aplicação */
+        .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stToolbar"] {
+            background-color: #FFFFFF !important;
             color: #1E293B !important;
         }
 
-        /* Container de upload e blocos */
+        /* Container de Upload de Arquivos */
         [data-testid="stFileUploader"] {
-            background-color: #FFFFFF !important;
+            background-color: #F8FAFC !important;
             border: 1px solid #E2E8F0 !important;
             border-radius: 8px !important;
             padding: 12px !important;
@@ -35,7 +35,7 @@ st.markdown("""
 
         /* Cartões de Métricas Executivas */
         div.metric-container, div[data-testid="stMetric"] {
-            background-color: #FFFFFF !important;
+            background-color: #F8FAFC !important;
             border: 1px solid #E2E8F0 !important;
             border-radius: 8px !important;
             padding: 16px !important;
@@ -49,7 +49,7 @@ st.markdown("""
             color: #0F172A !important;
         }
 
-        /* Tipografia Executiva */
+        /* Tipografia */
         h1, h2, h3, h4, h5, h6 {
             color: #0F172A !important;
             font-weight: 700 !important;
@@ -60,12 +60,13 @@ st.markdown("""
             color: #1E293B;
         }
 
-        /* Inputs, selects e multiselects */
-        .stMultiSelect, .stTextInput, .stSelectbox {
+        /* Selects, Inputs e Multiselects */
+        .stMultiSelect div[data-baseweb="select"] {
             background-color: #FFFFFF !important;
+            border-color: #CBD5E1 !important;
         }
 
-        /* Tabelas e Data Editors limpos em modo claro */
+        /* Tabelas e Data Editors no modo claro */
         [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
             background-color: #FFFFFF !important;
             border: 1px solid #E2E8F0 !important;
@@ -451,6 +452,7 @@ if arquivo_excel is not None:
                     df_mapa_agrup['lat'] = lats
                     df_mapa_agrup['lon'] = lons
                     
+                    # Gráfico Plotly configurado com template branco puro (plotly_white)
                     fig = px.scatter_geo(
                         df_mapa_agrup,
                         lat='lat',
@@ -461,6 +463,7 @@ if arquivo_excel is not None:
                         hover_name='Cidade',
                         scope='south america',
                         projection='natural earth',
+                        template='plotly_white',
                         height=320
                     )
                     fig.update_traces(textposition='top center')
