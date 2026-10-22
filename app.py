@@ -244,34 +244,6 @@ if arquivo_excel is not None:
             vencidas_qt = len(df_filtrado[df_filtrado['Status Geral'] == "🔴 Vencido"])
             st.metric("Ocorrências Vencidas", vencidas_qt)
         
-        # --- MINI MAPA LIMITADO ÀS CIDADES PRESENTES NA LISTA 'UPADA' ---
-        st.write("")
-        st.markdown("#### 🗺️ Distribuição de Ocorrências por Cidade")
-        if not df_filtrado.empty:
-            df_mapa_agrup = df_filtrado.groupby('Cidade').size().reset_index(name='TotalOcorrencias')
-            
-            # Filtra apenas as cidades do relatório que possuem coordenadas cadastradas
-            df_mapa_agrup = df_mapa_agrup[df_mapa_agrup['Cidade'].isin(COORDENADAS_CIDADES.keys())].copy()
-            
-            if not df_mapa_agrup.empty:
-                lats, lons, sizes = [], [], []
-                for _, row in df_mapa_agrup.iterrows():
-                    cidade_nome = row['Cidade']
-                    coord = COORDENADAS_CIDADES[cidade_nome]
-                    lats.append(coord['lat'])
-                    lons.append(coord['lon'])
-                    sizes.append(max(row['TotalOcorrencias'] * 30, 100))
-                
-                df_mapa_agrup['lat'] = lats
-                df_mapa_agrup['lon'] = lons
-                df_mapa_agrup['tamanho'] = sizes
-                
-                st.map(df_mapa_agrup, latitude='lat', longitude='lon', size='tamanho', zoom=6, use_container_width=True)
-            else:
-                st.info("ℹ️ Nenhuma das cidades da seleção atual possui coordenadas cadastradas no mapa.")
-        else:
-            st.info("Nenhum dado geográfico disponível para os filtros atuais.")
-
         st.write("---")
         st.markdown("**Lista de Ocorrências Ordenadas (Mais Próxima para a Mais Distante):**")
         
@@ -382,6 +354,47 @@ if arquivo_excel is not None:
                 file_name="comodatos_inativos_pendentes.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
+
+        st.divider()
+
+        # --- SEÇÃO 4: LEGENDA E MINI MAPA POR CIDADE (ABAIXO DOS COMODATOS) ---
+        st.subheader("4. Distribuição Geográfica por Cidade")
+        st.markdown("Legenda e mini mapa com a quantidade de ocorrências pendentes por cidade.")
+
+        if not df_filtrado.empty:
+            df_mapa_agrup = df_filtrado.groupby('Cidade').size().reset_index(name='Total Ocorrências')
+            df_mapa_agrup = df_mapa_agrup[df_mapa_agrup['Cidade'].isin(COORDENADAS_CIDADES.keys())].copy()
+            df_mapa_agrup = df_mapa_agrup.sort_values(by='Total Ocorrências', ascending=False)
+
+            col_legenda, col_minimapa = st.columns(2)
+
+            with col_legenda:
+                st.markdown("##### 📋 Legenda / Quantidade por Cidade")
+                st.dataframe(
+                    df_mapa_agrup[['Cidade', 'Total Ocorrências']],
+                    hide_index=True,
+                    use_container_width=True
+                )
+
+            with col_minimapa:
+                st.markdown("##### 🗺️ Mini Mapa")
+                if not df_mapa_agrup.empty:
+                    lats, lons, sizes = [], [], []
+                    for _, row in df_mapa_agrup.iterrows():
+                        coord = COORDENADAS_CIDADES[row['Cidade']]
+                        lats.append(coord['lat'])
+                        lons.append(coord['lon'])
+                        sizes.append(max(row['Total Ocorrências'] * 15, 50))
+                    
+                    df_mapa_agrup['lat'] = lats
+                    df_mapa_agrup['lon'] = lons
+                    df_mapa_agrup['tamanho'] = sizes
+                    
+                    st.map(df_mapa_agrup, latitude='lat', longitude='lon', size='tamanho', zoom=5, use_container_width=True)
+                else:
+                    st.info("Nenhuma cidade com coordenadas cadastradas na seleção atual.")
+        else:
+            st.info("Nenhum dado disponível para exibir no mapa.")
 
     except Exception as e:
         st.error(f"⚠️ Ocorreu um erro ao processar o ficheiro. Certifique-se de ser o relatório padrão do sistema. Erro técnico: {e}")
