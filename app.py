@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 import streamlit as st
+import plotly.express as px
 from datetime import datetime, timedelta
 from io import BytesIO
 
@@ -357,9 +358,9 @@ if arquivo_excel is not None:
 
         st.divider()
 
-        # --- SEÇÃO 4: LEGENDA E MINI MAPA POR CIDADE (ABAIXO DOS COMODATOS) ---
+        # --- SEÇÃO 4: LEGENDA E MINI MAPA NUMÉRICO POR CIDADE (ABAIXO DOS COMODATOS) ---
         st.subheader("4. Distribuição Geográfica por Cidade")
-        st.markdown("Legenda e mini mapa com a quantidade de ocorrências pendentes por cidade.")
+        st.markdown("Legenda e mini mapa numérico com a quantidade de ocorrências pendentes por cidade.")
 
         if not df_filtrado.empty:
             df_mapa_agrup = df_filtrado.groupby('Cidade').size().reset_index(name='Total Ocorrências')
@@ -377,20 +378,34 @@ if arquivo_excel is not None:
                 )
 
             with col_minimapa:
-                st.markdown("##### 🗺️ Mini Mapa")
+                st.markdown("##### 🗺️ Mini Mapa Numérico")
                 if not df_mapa_agrup.empty:
-                    lats, lons, sizes = [], [], []
+                    lats, lons = [], []
                     for _, row in df_mapa_agrup.iterrows():
                         coord = COORDENADAS_CIDADES[row['Cidade']]
                         lats.append(coord['lat'])
                         lons.append(coord['lon'])
-                        sizes.append(max(row['Total Ocorrências'] * 15, 50))
                     
                     df_mapa_agrup['lat'] = lats
                     df_mapa_agrup['lon'] = lons
-                    df_mapa_agrup['tamanho'] = sizes
                     
-                    st.map(df_mapa_agrup, latitude='lat', longitude='lon', size='tamanho', zoom=5, use_container_width=True)
+                    # Criação do mapa interativo com Plotly exibindo os números em cima dos pontos
+                    fig = px.scatter_mapbox(
+                        df_mapa_agrup,
+                        lat='lat',
+                        lon='lon',
+                        size='Total Ocorrências',
+                        color='Total Ocorrências',
+                        text='Total Ocorrências',
+                        hover_name='Cidade',
+                        zoom=6,
+                        height=320,
+                        mapbox_style="open-street-map"
+                    )
+                    fig.update_traces(textposition='top center')
+                    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+                    
+                    st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("Nenhuma cidade com coordenadas cadastradas na seleção atual.")
         else:
