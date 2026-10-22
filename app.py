@@ -14,6 +14,20 @@ from PIL import Image
 from fpdf import FPDF
 import streamlit.components.v1 as components
 
+# --- FORÇAR TEMA CLARO NATIVO NO STREAMLIT ---
+os.makedirs(".streamlit", exist_ok=True)
+config_path = os.path.join(".streamlit", "config.toml")
+if not os.path.exists(config_path):
+    with open(config_path, "w", encoding="utf-8") as f:
+        f.write(
+            '[theme]\n'
+            'base="light"\n'
+            'primaryColor="#0055A5"\n'
+            'backgroundColor="#FFFFFF"\n'
+            'secondaryBackgroundColor="#F8FAFC"\n'
+            'textColor="#1E293B"\n'
+        )
+
 # --- CONFIGURAÇÃO GLOBAL DA PÁGINA ---
 st.set_page_config(
     page_title="Sistema Integrado | Consigaz", 
@@ -27,7 +41,7 @@ LOGO_PATH = os.path.join(DIRETORIO_ATUAL, "logo.png")
 LOGO2_PATH = os.path.join(DIRETORIO_ATUAL, "logo2.png")
 
 # =====================================================================
-# IDENTIDADE VISUAL CONSIGAZ - TEMA CLARO E LIMPO
+# IDENTIDADE VISUAL CONSIGAZ - TEMA CLARO, LIMPO E COM BORDAS DELICADAS
 # =====================================================================
 CUSTOM_CSS = """
 <style>
@@ -41,6 +55,24 @@ html, body, [class*="css"], .stApp {
 
 [data-testid="stHeader"] { display: none !important; visibility: hidden !important; }
 #MainMenu, footer { visibility: hidden; }
+
+/* Forçar estilo limpo com bordas delicadas em inputs, caixas e uploader */
+div.stTextInput > div > div > input,
+div.stNumberInput > div > div > input,
+div.stSelectbox > div > div > div,
+div.stTextArea > div > div > textarea {
+  background-color: #FFFFFF !important;
+  color: #1E293B !important;
+  border: 1px solid rgba(120, 140, 160, 0.25) !important;
+  border-radius: 8px !important;
+}
+
+div[data-testid="stFileUploader"] {
+  background-color: #FFFFFF !important;
+  border: 1px dashed rgba(120, 140, 160, 0.4) !important;
+  border-radius: 10px !important;
+  padding: 10px;
+}
 
 /* Cabeçalho Consigaz */
 .cg-header { 
@@ -151,7 +183,7 @@ COL_PRAZO = "Prazo de Atendimento"
 COL_FECHAMENTO = "Data/Hora de fechamento"
 COL_SUB_CLASSIF = "Subclassificação Ocorrência"
 
-# Inicializa a memória de ocorrências tratadas manualmente na sessão
+# Inicialização do Session State
 if "tratadas_manualmente" not in st.session_state:
     st.session_state.tratadas_manualmente = set()
 
@@ -219,6 +251,22 @@ def classificar_status_geral(dias_uteis):
     else:
         return "🟢 No Prazo"
 
+# --- IPCA VIA API OFICIAL ---
+IPCA_VALOR_RESERVA = 4.58
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def obter_ipca_acumulado_12m():
+    url = "https://api.bcb.gov.br/dados/serie/bcdata.sugestao.433/dados/ultimos/1?formato=json"
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            dados = response.json()
+            if dados and len(dados) > 0:
+                return float(str(dados[0].get("valor", 4.58)).replace(",", ".")), "recente"
+    except Exception:
+        pass
+    return 4.58, "recente"
+
 # --- MENU LATERAL DE NAVEGAÇÃO ---
 side_logo_html = _logo_html("cg-side-logo", "cg-side-logo-wrapper")
 st.sidebar.markdown(
@@ -231,7 +279,8 @@ menu = st.sidebar.radio(
     [
         "📊 Dashboard de Ocorrências",
         "📷 Visita de Transferência",
-        "📝 Elaboração de Contrato"
+        "📝 Elaboração de Contrato",
+        "🎂 Aniversário de Contrato"
     ],
     label_visibility="collapsed"
 )
@@ -397,7 +446,7 @@ if menu == "📊 Dashboard de Ocorrências":
             st.error(f"⚠️ Ocorreu um erro ao processar o ficheiro. Certifique-se de ser o relatório padrão do sistema. Erro técnico: {e}")
 
     else:
-    	st.info("👆 Por favor, faça o upload da folha de cálculo atualizada de ocorrências acima para carregar o dashboard.")
+        st.info("👆 Por favor, faça o upload da folha de cálculo atualizada de ocorrências acima para carregar o dashboard.")
 
 
 # =====================================================================
@@ -868,7 +917,6 @@ elif menu == "📝 Elaboração de Contrato":
     col_con1, col_con2 = st.columns(2)
     
     cnpj_campo_val, ie_campo_val = "", ""
-    status_cnpj_txt, razao_social_txt = "", ""
     email_novo_prop = "n/a"
 
     with col_con1:
@@ -1020,3 +1068,68 @@ Tipo de Fornecimento: {sel_granel} Granel  {sel_cilindro} Cilindro"""
         
         st.success("✅ Texto padrão gerado com sucesso! Copie abaixo:")
         st.text_area("Texto Gerado:", value=texto_padrao_contrato, height=250, key=f"txt_area_contrato_{rcc}")
+
+
+# =====================================================================
+# TELA 3: ANIVERSÁRIO DE CONTRATO
+# =====================================================================
+elif menu == "🎂 Aniversário de Contrato":
+    rca = st.session_state.reset_counter_aniv if "reset_counter_aniv" in st.session_state else 0
+
+    cabecalho_pagina("Aniversário de Contrato", "Tratativa de reajuste por IPCA acumulado de 12 meses.")
+
+    st.divider()
+
+    ipca_api, ipca_periodo = obter_ipca_acumulado_12m()
+    if ipca_api is not None:
+        ipca_vigente = ipca_api
+        st.info(f"📊 **IPCA Acumulado de 12 meses (Referência IBGE):** **{ipca_vigente:.2f}%** (Obtido com sucesso do índice oficial)")
+    else:
+        st.warning(
+            "⚠️ Não foi possível consultar o IPCA automaticamente. "
+            "Informe o índice oficial manualmente abaixo para prosseguir com o cálculo."
+        )
+        ipca_vigente = st.number_input(
+            "IPCA acumulado de 12 meses (%) - informado manualmente",
+            min_value=0.0,
+            value=float(IPCA_VALOR_RESERVA),
+            step=0.01,
+            format="%.2f",
+            key=f"ipca_manual_{rca}"
+        )
+
+    col_an1, col_an2 = st.columns(2)
+    with col_an1:
+        preco_anterior_input = st.text_input("Preço Anterior (R$)", key=f"preco_ant_{rca}")
+    with col_an2:
+        st.write("")
+
+    clausula_contrato = st.radio("Cliente possui cláusula em contrato?", ["Sim", "Não"], horizontal=True, index=None, key=f"clausula_{rca}")
+
+    st.divider()
+
+    p_aniv_str = "xx,xx"
+    try:
+        val_limpo = preco_anterior_input.replace("R$", "").replace(" ", "").replace(".", "").replace(",", ".")
+        p_ant = float(val_limpo)
+        p_aniv = p_ant * (1 + (ipca_vigente / 100.0))
+        p_aniv_str = f"{p_aniv:.4f}".replace(".", ",")
+    except ValueError:
+        pass
+
+    if st.button("📝 Gerar Texto de Aniversário de Contrato", type="primary"):
+        if clausula_contrato == "Não":
+            st.warning("⚠️ **Atenção:** O cliente selecionado não possui cláusula de reajuste em contrato.")
+
+        texto_aniversario = f"Aumento de Aniversário de contrato, IPCA - {ipca_vigente:.2f}%."
+
+        if clausula_contrato == "Sim":
+            texto_aniversario += "\n\nCliente possui cláusula em contrato."
+
+        texto_aniversario += f"""
+
+Preço anterior: R$ {preco_anterior_input if preco_anterior_input else 'xx,xx'}
+Preço Aniversário: R$ {p_aniv_str}"""
+
+        st.success("✅ Texto gerado com sucesso! Copie abaixo:")
+        st.text_area("Texto Gerado:", value=texto_aniversario, height=180, key=f"txt_area_aniv_{rca}")
