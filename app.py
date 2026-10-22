@@ -20,6 +20,37 @@ COL_PRAZO = "Prazo de Atendimento"
 COL_FECHAMENTO = "Data/Hora de fechamento" # Usado para desconsiderar as já tratadas
 COL_SUB_CLASSIF = "Subclassificação Ocorrência"
 
+# Dicionário de coordenadas de referência para as cidades
+COORDENADAS_CIDADES = {
+    "São Paulo": {"lat": -23.5505, "lon": -46.6333},
+    "Campinas": {"lat": -22.9056, "lon": -47.0608},
+    "São José Dos Campos": {"lat": -23.1794, "lon": -45.8869},
+    "Ribeirão Preto": {"lat": -21.1775, "lon": -47.8103},
+    "Santos": {"lat": -23.9618, "lon": -46.3322},
+    "Sorocaba": {"lat": -23.5015, "lon": -47.4526},
+    "Bauru": {"lat": -22.3147, "lon": -49.0587},
+    "Jundiaí": {"lat": -23.1857, "lon": -46.8978},
+    "Piracicaba": {"lat": -22.7338, "lon": -47.6476},
+    "São José Do Rio Preto": {"lat": -20.8113, "lon": -49.3762},
+    "Taubaté": {"lat": -23.0204, "lon": -45.5567},
+    "Lorena": {"lat": -22.7342, "lon": -45.1225},
+    "Ubatuba": {"lat": -23.4337, "lon": -45.0839},
+    "Guaratinguetá": {"lat": -22.8153, "lon": -45.1956},
+    "Canoas": {"lat": -29.9199, "lon": -51.1884},
+    "Pindamonhangaba": {"lat": -22.9247, "lon": -45.4611},
+    "Cunha": {"lat": -23.1764, "lon": -44.9556},
+    "Caçapava": {"lat": -23.1022, "lon": -45.7111},
+    "Cruzeiro": {"lat": -22.5739, "lon": -44.9653},
+    "Aparecida": {"lat": -22.8483, "lon": -45.2289},
+    "Jacareí": {"lat": -23.3031, "lon": -45.9678},
+    "Tremembé": {"lat": -22.9536, "lon": -45.5519},
+    "Cachoeira Paulista": {"lat": -22.6653, "lon": -45.0042},
+    "Jambeiro": {"lat": -23.3081, "lon": -45.7725},
+    "Roseira": {"lat": -22.9039, "lon": -45.3047},
+    "Canas": {"lat": -22.7094, "lon": -45.0408},
+    "Potim": {"lat": -22.8419, "lon": -45.2575},
+}
+
 # Inicializa a memória de ocorrências tratadas manualmente na sessão do Streamlit
 if "tratadas_manualmente" not in st.session_state:
     st.session_state.tratadas_manualmente = set()
@@ -213,6 +244,34 @@ if arquivo_excel is not None:
             vencidas_qt = len(df_filtrado[df_filtrado['Status Geral'] == "🔴 Vencido"])
             st.metric("Ocorrências Vencidas", vencidas_qt)
         
+        # --- MINI MAPA LIMITADO ÀS CIDADES PRESENTES NA LISTA 'UPADA' ---
+        st.write("")
+        st.markdown("#### 🗺️ Distribuição de Ocorrências por Cidade")
+        if not df_filtrado.empty:
+            df_mapa_agrup = df_filtrado.groupby('Cidade').size().reset_index(name='TotalOcorrencias')
+            
+            # Filtra apenas as cidades do relatório que possuem coordenadas cadastradas
+            df_mapa_agrup = df_mapa_agrup[df_mapa_agrup['Cidade'].isin(COORDENADAS_CIDADES.keys())].copy()
+            
+            if not df_mapa_agrup.empty:
+                lats, lons, sizes = [], [], []
+                for _, row in df_mapa_agrup.iterrows():
+                    cidade_nome = row['Cidade']
+                    coord = COORDENADAS_CIDADES[cidade_nome]
+                    lats.append(coord['lat'])
+                    lons.append(coord['lon'])
+                    sizes.append(max(row['TotalOcorrencias'] * 30, 100))
+                
+                df_mapa_agrup['lat'] = lats
+                df_mapa_agrup['lon'] = lons
+                df_mapa_agrup['tamanho'] = sizes
+                
+                st.map(df_mapa_agrup, latitude='lat', longitude='lon', size='tamanho', zoom=6, use_container_width=True)
+            else:
+                st.info("ℹ️ Nenhuma das cidades da seleção atual possui coordenadas cadastradas no mapa.")
+        else:
+            st.info("Nenhum dado geográfico disponível para os filtros atuais.")
+
         st.write("---")
         st.markdown("**Lista de Ocorrências Ordenadas (Mais Próxima para a Mais Distante):**")
         
