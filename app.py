@@ -16,60 +16,78 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- DESIGN SYSTEM: ESTILO DE SISTEMA INTEGRADO (CSS INJETADO) ---
+# --- DESIGN SYSTEM: FORÇAR TEMA CLARO E ESTILO CORPORATIVO LIMPO ---
 st.markdown("""
     <style>
-        :root {
-            --primary: #0F172A;
-            --accent: #2563EB;
-            --bg-card: #FFFFFF;
-            --border: #E2E8F0;
-            --text-main: #1E293B;
-            --text-muted: #64748B;
+        /* Forçar variáveis do sistema para Tema Claro (Light Mode) */
+        [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stToolbar"], .stApp {
+            background-color: #F8FAFC !important;
+            color: #1E293B !important;
         }
 
-        .stApp {
-            background-color: #F8FAFC;
-            color: var(--text-main);
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        /* Container de upload e blocos */
+        [data-testid="stFileUploader"] {
+            background-color: #FFFFFF !important;
+            border: 1px solid #E2E8F0 !important;
+            border-radius: 8px !important;
+            padding: 12px !important;
         }
 
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-
+        /* Cartões de Métricas Executivas */
         div.metric-container, div[data-testid="stMetric"] {
-            background-color: #FFFFFF;
-            border: 1px solid #E2E8F0;
-            border-radius: 8px;
-            padding: 16px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-            transition: all 0.2s ease-in-out;
+            background-color: #FFFFFF !important;
+            border: 1px solid #E2E8F0 !important;
+            border-radius: 8px !important;
+            padding: 16px !important;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02) !important;
+            color: #1E293B !important;
         }
-        div[data-testid="stMetric"]:hover {
-            border-color: #CBD5E1;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        div[data-testid="stMetric"] label {
+            color: #64748B !important;
+        }
+        div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+            color: #0F172A !important;
         }
 
-        h1, h2, h3, h4, h5 {
-            color: #0F172A;
-            font-weight: 700;
-            letter-spacing: -0.025em;
+        /* Tipografia Executiva */
+        h1, h2, h3, h4, h5, h6 {
+            color: #0F172A !important;
+            font-weight: 700 !important;
+            letter-spacing: -0.025em !important;
         }
         
+        p, span, label, div {
+            color: #1E293B;
+        }
+
+        /* Inputs, selects e multiselects */
+        .stMultiSelect, .stTextInput, .stSelectbox {
+            background-color: #FFFFFF !important;
+        }
+
+        /* Tabelas e Data Editors limpos em modo claro */
+        [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
+            background-color: #FFFFFF !important;
+            border: 1px solid #E2E8F0 !important;
+            border-radius: 8px !important;
+        }
+
         hr {
             margin: 1.5rem 0;
-            border-color: #E2E8F0;
+            border-color: #E2E8F0 !important;
         }
 
         .stButton>button {
+            background-color: #FFFFFF;
+            color: #1E293B;
+            border: 1px solid #CBD5E1;
             border-radius: 6px;
             font-weight: 500;
             transition: all 0.2s;
         }
-        
-        .stAlert {
-            border-radius: 6px;
-            border: 1px solid transparent;
+        .stButton>button:hover {
+            border-color: #2563EB;
+            color: #2563EB;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -433,7 +451,6 @@ if arquivo_excel is not None:
                     df_mapa_agrup['lat'] = lats
                     df_mapa_agrup['lon'] = lons
                     
-                    # Mapa interativo Plotly com os números exibidos sobre os pontos
                     fig = px.scatter_geo(
                         df_mapa_agrup,
                         lat='lat',
@@ -447,7 +464,11 @@ if arquivo_excel is not None:
                         height=320
                     )
                     fig.update_traces(textposition='top center')
-                    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+                    fig.update_layout(
+                        margin={"r":0,"t":0,"l":0,"b":0},
+                        paper_bgcolor="#FFFFFF",
+                        plot_bgcolor="#FFFFFF"
+                    )
                     
                     st.plotly_chart(fig, use_container_width=True)
                 else:
