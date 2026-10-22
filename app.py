@@ -16,21 +16,35 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- DESIGN SYSTEM: FORÇAR TEMA CLARO ABSOLUTO (LIGHT MODE) ---
+# --- DESIGN SYSTEM: FORÇAR TEMA CLARO ABSOLUTO (LIMPEZA DE COMPONENTES) ---
 st.markdown("""
     <style>
-        /* Forçar fundo branco e texto escuro em toda a aplicação */
+        /* Fundo geral da aplicação */
         .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stToolbar"] {
             background-color: #FFFFFF !important;
             color: #1E293B !important;
         }
 
-        /* Container de Upload de Arquivos */
-        [data-testid="stFileUploader"] {
+        /* Uploader de arquivos (forçar fundo claro na dropzone) */
+        [data-testid="stFileUploader"], [data-testid="stFileUploader"] section {
             background-color: #F8FAFC !important;
             border: 1px solid #E2E8F0 !important;
             border-radius: 8px !important;
-            padding: 12px !important;
+            color: #1E293B !important;
+        }
+        [data-testid="stFileUploader"] section * {
+            color: #1E293B !important;
+        }
+
+        /* Multiselects e Selectboxes */
+        div[data-baseweb="select"] > div {
+            background-color: #FFFFFF !important;
+            border-color: #CBD5E1 !important;
+            color: #1E293B !important;
+        }
+        div[data-baseweb="tag"] {
+            background-color: #E2E8F0 !important;
+            color: #1E293B !important;
         }
 
         /* Cartões de Métricas Executivas */
@@ -60,13 +74,7 @@ st.markdown("""
             color: #1E293B;
         }
 
-        /* Selects, Inputs e Multiselects */
-        .stMultiSelect div[data-baseweb="select"] {
-            background-color: #FFFFFF !important;
-            border-color: #CBD5E1 !important;
-        }
-
-        /* Tabelas e Data Editors no modo claro */
+        /* Dataframes e Data Editors (Forçar fundo branco e cabeçalhos claros) */
         [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
             background-color: #FFFFFF !important;
             border: 1px solid #E2E8F0 !important;
@@ -452,7 +460,6 @@ if arquivo_excel is not None:
                     df_mapa_agrup['lat'] = lats
                     df_mapa_agrup['lon'] = lons
                     
-                    # Gráfico Plotly configurado com template branco puro (plotly_white)
                     fig = px.scatter_geo(
                         df_mapa_agrup,
                         lat='lat',
