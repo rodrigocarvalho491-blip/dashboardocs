@@ -10,7 +10,69 @@ from io import BytesIO
 DIRETORIO_ATUAL = os.path.dirname(os.path.abspath(__file__))
 LOGO_PATH = os.path.join(DIRETORIO_ATUAL, "logo.png")
 
-st.set_page_config(page_title="Dashboard de Ocorrências", page_icon="📊", layout="wide")
+st.set_page_config(
+    page_title="ERP | Gestão de Ocorrências e Pós-Vendas", 
+    page_icon="⚡", 
+    layout="wide"
+)
+
+# --- DESIGN SYSTEM: ESTILO DE SISTEMA INTEGRADO (CSS INJETADO) ---
+st.markdown("""
+    <style>
+        :root {
+            --primary: #0F172A;
+            --accent: #2563EB;
+            --bg-card: #FFFFFF;
+            --border: #E2E8F0;
+            --text-main: #1E293B;
+            --text-muted: #64748B;
+        }
+
+        .stApp {
+            background-color: #F8FAFC;
+            color: var(--text-main);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+
+        div.metric-container, div[data-testid="stMetric"] {
+            background-color: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+            transition: all 0.2s ease-in-out;
+        }
+        div[data-testid="stMetric"]:hover {
+            border-color: #CBD5E1;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+
+        h1, h2, h3, h4, h5 {
+            color: #0F172A;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+        }
+        
+        hr {
+            margin: 1.5rem 0;
+            border-color: #E2E8F0;
+        }
+
+        .stButton>button {
+            border-radius: 6px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .stAlert {
+            border-radius: 6px;
+            border: 1px solid transparent;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 # --- MAPEAMENTO DAS COLUNAS DO SEU EXCEL ---
 COL_OCORRENCIA = "Número da ocorrência"
@@ -18,7 +80,7 @@ COL_CLIENTE = "Nome do cliente"
 COL_ENDERECO = "Endereço de Entrega"
 COL_ABERTURA = "Data/Hora de abertura"
 COL_PRAZO = "Prazo de Atendimento"
-COL_FECHAMENTO = "Data/Hora de fechamento" # Usado para desconsiderar as já tratadas
+COL_FECHAMENTO = "Data/Hora de fechamento"
 COL_SUB_CLASSIF = "Subclassificação Ocorrência"
 
 # Dicionário de coordenadas de referência para as cidades
@@ -94,7 +156,7 @@ def classificar_status_geral(dias_uteis):
     else:
         return "🟢 No Prazo"
 
-# Função de status específica para comodatos (semanas regressivas úteis até o prazo)
+# Função de status específica para comodatos
 def classificar_status_comodato(dias_uteis):
     if dias_uteis < 0:
         return "🔴 Vencido"
@@ -103,24 +165,27 @@ def classificar_status_comodato(dias_uteis):
     elif dias_uteis == 1:
         return "🟠 Vence Amanhã"
     elif dias_uteis <= 5:
-        return "🔴 3ª Semana" # Semana do vencimento (até 5 dias úteis)
+        return "🔴 3ª Semana"
     elif dias_uteis <= 10:
-        return "🟡 2ª Semana" # Semana intermediária (até 10 dias úteis)
+        return "🟡 2ª Semana"
     else:
-        return "🟢 1ª Semana" # Semana mais distante
+        return "🟢 1ª Semana"
 
-# --- CABEÇALHO DO APP COM LOGO ---
-col_logo, col_titulo = st.columns([1, 4])
+# --- TOPBAR / CABEÇALHO DO SISTEMA INTEGRADO ---
+col_logo, col_titulo, col_status_sis = st.columns([1, 6, 2])
 
 with col_logo:
     if os.path.exists(LOGO_PATH):
-        st.image(LOGO_PATH, width=150)
+        st.image(LOGO_PATH, width=120)
     else:
-        st.caption("📷 *Adicione 'logo.png' na pasta do projeto*")
+        st.markdown("🏢 **ERP CONNECT**")
 
 with col_titulo:
-    st.title("Gestão de Ocorrências & Visitas")
-    st.markdown("Painel de organização de agenda ordenado por prazo de atendimento (Dias Úteis).")
+    st.markdown("### **Módulo de Pós-Vendas & Atendimento**")
+    st.caption("Sistema Integrado de Gestão de Ocorrências por Prazos, SLAs e Geografia")
+
+with col_status_sis:
+    st.markdown("<div style='text-align: right; padding-top: 10px;'><span style='background-color: #DCFCE7; color: #166534; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;'>● Servidor Ativo</span></div>", unsafe_allow_html=True)
 
 st.divider()
 
@@ -136,7 +201,6 @@ st.divider()
 
 if arquivo_excel is not None:
     try:
-        # Lê o Excel sem cabeçalho primeiro para encontrar dinamicamente onde está a tabela
         df_raw = pd.read_excel(arquivo_excel, header=None)
         
         header_row = None
@@ -149,52 +213,35 @@ if arquivo_excel is not None:
         if header_row is not None:
             df = pd.read_excel(arquivo_excel, header=header_row)
         else:
-            # Fallback padrão caso não encontre pelo texto exato
             df = pd.read_excel(arquivo_excel, header=11)
             
-        # Limpa nomes de colunas (remove espaços extras)
         df.columns = df.columns.str.strip()
-        
-        # Remove linhas totalmente vazias ou sem número de ocorrência
         df = df.dropna(subset=[COL_OCORRENCIA])
         
-        # 1. Filtro base: Desconsiderar ocorrências tratadas no Excel e as marcadas manualmente na sessão
         df_pendentes = df[df[COL_FECHAMENTO].isna()].copy()
-        
         df_pendentes[COL_OCORRENCIA] = pd.to_numeric(df_pendentes[COL_OCORRENCIA], errors='coerce')
         df_pendentes = df_pendentes.dropna(subset=[COL_OCORRENCIA])
         df_pendentes[COL_OCORRENCIA] = df_pendentes[COL_OCORRENCIA].astype(int)
         
         df_pendentes = df_pendentes[~df_pendentes[COL_OCORRENCIA].isin(st.session_state.tratadas_manualmente)]
         
-        # 2. Tratamento das colunas de Data para o formato datetime
         df_pendentes['Prazo_DT'] = pd.to_datetime(df_pendentes[COL_PRAZO], format="%d/%m/%Y %H:%M", errors='coerce')
         df_pendentes['Abertura_DT'] = pd.to_datetime(df_pendentes[COL_ABERTURA], format="%d/%m/%Y %H:%M", errors='coerce')
-        
-        # Remove linhas onde o prazo não pôde ser lido
         df_pendentes = df_pendentes.dropna(subset=['Prazo_DT'])
         
-        # 3. Extrair apenas o nome da Cidade do Endereço de Entrega
         df_pendentes['Cidade'] = df_pendentes[COL_ENDERECO].apply(extrair_cidade)
-        
-        # Garante que a coluna de Sub-Classificação está tratada como texto
         df_pendentes[COL_SUB_CLASSIF] = df_pendentes[COL_SUB_CLASSIF].fillna("-").astype(str)
         
-        # 4. Cálculo da regressiva em DIAS ÚTEIS para o prazo de atendimento
         hoje = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         df_pendentes['Dias Úteis Restantes'] = df_pendentes['Prazo_DT'].apply(lambda x: calcular_dias_uteis(hoje, x))
         
-        # 5. Aplicar status específico para a geral e para comodato
         df_pendentes['Status Geral'] = df_pendentes['Dias Úteis Restantes'].apply(classificar_status_geral)
         df_pendentes['Status Comodato'] = df_pendentes['Dias Úteis Restantes'].apply(classificar_status_comodato)
-        
-        # 6. ORDENAÇÃO OBRIGATÓRIA: Da data mais próxima para a mais distante
         df_pendentes = df_pendentes.sort_values(by='Prazo_DT', ascending=True)
         
         # --- SEÇÃO 2: PAINEL DE OCORRÊNCIAS (DASHBOARD GERAL) ---
         st.subheader("2. Agenda Geral de Visitas Pendentes")
         
-        # ÁREA DE FILTROS DO DASHBOARD GERAL
         st.markdown("### Filtros de Visualização")
         
         col_t1, col_t2 = st.columns(2)
@@ -212,7 +259,6 @@ if arquivo_excel is not None:
         with col_f2:
             sub_class_selecionadas = st.multiselect("Filtrar por Sub-Classificação:", sub_class_unicas, default=[], key="filtro_sub")
         
-        # Aplicação dos filtros na cópia do dataframe principal
         df_filtrado = df_pendentes.copy()
         
         if mostrar_so_hoje:
@@ -228,10 +274,8 @@ if arquivo_excel is not None:
         if sub_class_selecionadas:
             df_filtrado = df_filtrado[df_filtrado[COL_SUB_CLASSIF].isin(sub_class_selecionadas)]
         
-        # Formata a data para exibir APENAS A DATA (sem horário)
         df_filtrado['Data Atendimento'] = df_filtrado['Prazo_DT'].dt.strftime('%d/%m/%Y')
         
-        # Métricas de Resumo
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         with col_m1:
             st.metric("Visitas Pendentes", len(df_filtrado))
@@ -390,7 +434,7 @@ if arquivo_excel is not None:
                     df_mapa_agrup['lon'] = lons
                     
                     # Mapa interativo Plotly com os números exibidos sobre os pontos
-                    fig = px.scatter_mapbox(
+                    fig = px.scatter_geo(
                         df_mapa_agrup,
                         lat='lat',
                         lon='lon',
@@ -398,9 +442,9 @@ if arquivo_excel is not None:
                         color='Total Ocorrências',
                         text='Total Ocorrências',
                         hover_name='Cidade',
-                        zoom=6,
-                        height=320,
-                        mapbox_style="open-street-map"
+                        scope='south america',
+                        projection='natural earth',
+                        height=320
                     )
                     fig.update_traces(textposition='top center')
                     fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
