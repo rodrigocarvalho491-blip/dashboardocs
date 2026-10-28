@@ -7,6 +7,18 @@ import base64
 from datetime import datetime, timedelta
 from io import BytesIO
 
+# --- FORÇAR TEMA CLARO GLOBALMENTE NO STREAMLIT ---
+os.makedirs(".streamlit", exist_ok=True)
+with open(".streamlit/config.toml", "w", encoding="utf-8") as f:
+    f.write(
+        '[theme]\n'
+        'base="light"\n'
+        'primaryColor="#0055A5"\n'
+        'backgroundColor="#FFFFFF"\n'
+        'secondaryBackgroundColor="#F1F5FA"\n'
+        'textColor="#1B2A3A"\n'
+    )
+
 # --- CONFIGURAÇÃO GLOBAL DA PÁGINA ---
 st.set_page_config(
     page_title="Dashboard de Ocorrências | Consigaz", 
@@ -19,36 +31,27 @@ DIRETORIO_ATUAL = os.path.dirname(os.path.abspath(__file__))
 LOGO_PATH = os.path.join(DIRETORIO_ATUAL, "logo.png")
 
 # =====================================================================
-# IDENTIDADE VISUAL CONSIGAZ - PADRÃO "SISTEMA INTEGRADO"
+# IDENTIDADE VISUAL CONSIGAZ - TEMA CLARO UNIFICADO
 # =====================================================================
 CUSTOM_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
-:root {
-  --cg-azul-principal: #003366;
-  --cg-azul-vibrante: #0055A5;
-  --cg-laranja: #F28C28;
-  --cg-fundo: #F1F5FA;
-  --cg-texto: #1B2A3A;
-  --cg-texto-suave: #5B6B7C;
-  --cg-borda: #D3DDEA;
-}
-
 html, body, [class*="css"], .stApp {
   font-family: 'Plus Jakarta Sans', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+  background-color: #F1F5FA !important;
+  color: #1B2A3A !important;
 }
 
-.stApp { background: var(--cg-fundo); color: var(--cg-texto); }
 [data-testid="stHeader"] { background: transparent; }
 #MainMenu, footer { visibility: hidden; }
 
-/* Painel central / Container */
+/* Container Principal */
 .block-container, [data-testid="stMainBlockContainer"] {
   max-width: 1180px !important;
   margin: 1.2rem auto 2rem auto !important;
   padding: 1.8rem 2.4rem 2.4rem 2.4rem !important;
-  background: #FFFFFF;
+  background: #FFFFFF !important;
   border-radius: 16px;
   box-shadow: 0 1px 2px rgba(10,37,64,.06), 0 8px 28px rgba(10,37,64,.07);
 }
@@ -57,21 +60,21 @@ html, body, [class*="css"], .stApp {
 .cg-header { 
   display: flex; 
   align-items: center; 
-  gap: 1.2rem; 
+  gap: 1.5rem; 
   position: relative;
   padding-bottom: 1.2rem; 
-  margin-bottom: 1.5rem; 
-  border-bottom: 1px solid var(--cg-borda); 
+  margin-bottom: 2rem; 
+  border-bottom: 2px solid #E2E8F0; 
 }
 .cg-header::after { 
   content: ""; 
   position: absolute; 
   left: 0; 
-  bottom: -1px; 
+  bottom: -2px; 
   width: 140px; 
   height: 4px; 
   border-radius: 4px; 
-  background: linear-gradient(90deg, var(--cg-azul-vibrante) 0%, var(--cg-laranja) 100%); 
+  background: linear-gradient(90deg, #0055A5 0%, #F28C28 100%); 
 }
 
 .cg-logo-wrapper {
@@ -82,57 +85,51 @@ html, body, [class*="css"], .stApp {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--cg-borda);
+  border: 1px solid #E2E8F0;
 }
-.cg-logo { height: 48px; width: auto; display: block; }
+.cg-logo { height: 55px; width: auto; display: block; }
 
-.cg-header-sep { width: 1px; align-self: stretch; background: var(--cg-borda); }
-.cg-title { font-size: 1.6rem; font-weight: 800; line-height: 1.2; color: var(--cg-azul-principal) !important; letter-spacing: -0.02em; }
-.cg-subtitle { font-size: 0.92rem; margin-top: 0.25rem; color: var(--cg-texto-suave) !important; font-weight: 500; }
+.cg-header-sep { width: 2px; align-self: stretch; background: #E2E8F0; }
+.cg-title { font-size: 1.65rem; font-weight: 800; line-height: 1.2; color: #003366 !important; }
+.cg-subtitle { font-size: 0.95rem; margin-top: 0.2rem; color: #64748B !important; font-weight: 500; }
 
 /* Títulos de Seção */
-.stApp h1, .stApp h2 { color: var(--cg-azul-principal) !important; font-weight: 800 !important; }
 .stApp h3 {
-  font-size: 1.08rem !important;
-  font-weight: 800 !important;
-  color: var(--cg-azul-principal) !important;
-  padding: 0 0 0 0.75rem !important;
-  border-left: 4px solid var(--cg-azul-vibrante) !important;
+  font-size: 1.1rem !important;
+  font-weight: 700 !important;
+  color: #003366 !important;
+  padding: 0.2rem 0 0.2rem 0.6rem !important;
+  border-left: 4px solid #F28C28 !important;
   margin-top: 1.5rem !important;
   margin-bottom: 1rem !important;
-  line-height: 1.3 !important;
 }
 
-/* Botões modernos */
-.stButton > button, .stDownloadButton > button {
-  border-radius: 10px !important;
-  border: 1.5px solid var(--cg-azul-vibrante) !important;
-  background: #FFFFFF !important;
-  color: var(--cg-azul-vibrante) !important;
-  font-weight: 700 !important;
-  padding: 0.45rem 1.1rem !important;
-  transition: all 0.15s ease-in-out !important;
+/* Ajuste de Métricas para contraste perfeito em tema claro */
+[data-testid="stMetric"] {
+  background-color: #F8FAFC !important;
+  border: 1px solid #E2E8F0 !important;
+  padding: 14px 18px !important;
+  border-radius: 12px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
 }
-.stButton > button:hover, .stDownloadButton > button:hover {
-  background: #E7EFF9 !important;
-  color: var(--cg-azul-vibrante) !important;
+[data-testid="stMetricValue"] {
+  color: #003366 !important;
+  font-weight: 800 !important;
 }
-.stButton > button[kind="primary"], .stButton > button[data-testid="stBaseButton-primary"], .stDownloadButton > button {
-  background: var(--cg-azul-vibrante) !important;
-  color: #FFFFFF !important;
-  border-color: var(--cg-azul-vibrante) !important;
-}
-.stButton > button[kind="primary"]:hover, .stButton > button[data-testid="stBaseButton-primary"]:hover, .stDownloadButton > button:hover {
-  background: #003060 !important;
-  color: #FFFFFF !important;
+[data-testid="stMetricLabel"] {
+  color: #5B6B7C !important;
+  font-weight: 600 !important;
 }
 
 /* Sidebar Estilizada */
-[data-testid="stSidebar"] { background: #FFFFFF; border-right: 1px solid var(--cg-borda); }
+[data-testid="stSidebar"] {
+  background-color: #FFFFFF !important;
+  border-right: 1px solid #E2E8F0;
+}
 .cg-side-brand { 
-  padding: 0.5rem 0.2rem 1.2rem 0.2rem; 
+  padding: 0.8rem 0.5rem 1.2rem 0.5rem; 
   margin-bottom: 1rem; 
-  border-bottom: 1px solid var(--cg-borda); 
+  border-bottom: 1px solid #E2E8F0; 
   text-align: center;
 }
 .cg-side-logo-wrapper {
@@ -141,14 +138,9 @@ html, body, [class*="css"], .stApp {
   border-radius: 8px;
   display: inline-block;
   box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-  border: 1px solid var(--cg-borda);
 }
 .cg-side-logo { height: 38px; width: auto; display: inline-block; }
-.cg-side-name { margin-top: 0.6rem; font-size: 0.78rem; font-weight: 700; color: var(--cg-texto-suave) !important; letter-spacing: 0.08em; text-transform: uppercase; }
-
-@media (max-width: 768px) {
-  .block-container, [data-testid="stMainBlockContainer"] { padding: 1rem !important; border-radius: 0; margin: 0 auto !important; }
-}
+.cg-side-name { margin-top: 0.6rem; font-size: 0.7rem; font-weight: 700; color: #64748B !important; letter-spacing: 0.08em; text-transform: uppercase; }
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
@@ -193,7 +185,7 @@ st.sidebar.divider()
 if st.sidebar.button("🔄 Atualizar / Limpar Cache"):
     st.rerun()
 
-# --- MAPEAMENTO DAS COLUNAS DO EXCEL ---
+# --- MAPEAMENTO DAS COLUNAS DO SEU EXCEL ---
 COL_OCORRENCIA = "Número da ocorrência"
 COL_CLIENTE = "Nome do cliente"
 COL_ENDERECO = "Endereço de Entrega"
@@ -244,6 +236,21 @@ def classificar_status_geral(dias_uteis):
     else:
         return "🟢 No Prazo"
 
+# Função de status específica para comodatos
+def classificar_status_comodato(dias_uteis):
+    if dias_uteis < 0:
+        return "🔴 Vencido"
+    elif dias_uteis == 0:
+        return "🔵 Vence Hoje"
+    elif dias_uteis == 1:
+        return "🟠 Vence Amanhã"
+    elif dias_uteis <= 5:
+        return "🔴 3ª Semana" 
+    elif dias_uteis <= 10:
+        return "🟡 2ª Semana" 
+    else:
+        return "🟢 1ª Semana" 
+
 # --- CABEÇALHO DO APLICATIVO ---
 cabecalho_pagina("Dashboard de Ocorrências & Visitas", "Painel de organização de agenda ordenado por prazo de atendimento (Dias Úteis).")
 
@@ -281,6 +288,7 @@ if arquivo_excel is not None:
         df_pendentes['Dias Úteis Restantes'] = df_pendentes['Prazo_DT'].apply(lambda x: calcular_dias_uteis(hoje, x))
         
         df_pendentes['Status Geral'] = df_pendentes['Dias Úteis Restantes'].apply(classificar_status_geral)
+        df_pendentes['Status Comodato'] = df_pendentes['Dias Úteis Restantes'].apply(classificar_status_comodato)
         
         df_pendentes = df_pendentes.sort_values(by='Prazo_DT', ascending=True)
         
@@ -378,6 +386,98 @@ if arquivo_excel is not None:
                         st.session_state.tratadas_manualmente.add(int(oc))
                     st.success("✅ Ocorrência(s) tratada(s) com sucesso e removida(s) do painel!")
                     st.rerun()
+
+        st.divider()
+
+        # --- SEÇÃO 3: RELATÓRIO SEPARADO DE COMODATO INATIVO ---
+        st.subheader("3. Relatório Específico: Comodato Inativo")
+        st.markdown("Separação exclusiva das ocorrências de **Comodato Inativo** com contagem regressiva em dias úteis e semanas.")
+
+        df_comodato = df_pendentes[df_pendentes[COL_SUB_CLASSIF].str.contains("Comodato Inativo", case=False, na=False)].copy()
+
+        if df_comodato.empty:
+            st.info("ℹ️ Não foram encontradas ocorrências pendentes com a sub-classificação 'Comodato Inativo' no ficheiro enviado.")
+        else:
+            df_comodato['Data Atendimento'] = df_comodato['Prazo_DT'].dt.strftime('%d/%m/%Y')
+            
+            df_comodato_exibicao = df_comodato[[
+                'Status Comodato',
+                'Dias Úteis Restantes',
+                COL_OCORRENCIA, 
+                COL_CLIENTE, 
+                'Cidade', 
+                COL_SUB_CLASSIF,
+                'Data Atendimento'
+            ]].copy()
+            df_comodato_exibicao[COL_OCORRENCIA] = df_comodato_exibicao[COL_OCORRENCIA].astype(str)
+
+            st.metric("Total de Comodatos Inativos Pendentes", len(df_comodato_exibicao))
+            
+            edited_comodato = st.data_editor(
+                df_comodato_exibicao.assign(Tratar=False),
+                column_config={
+                    "Tratar": st.column_config.CheckboxColumn("✅ Marcar Tratada?", required=True),
+                    'Status Comodato': st.column_config.TextColumn("Status Semanal", width="small", disabled=True),
+                    'Dias Úteis Restantes': st.column_config.NumberColumn("Dias Úteis Restantes", width="small", disabled=True),
+                    COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small", disabled=True),
+                    COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large", disabled=True),
+                    'Cidade': st.column_config.TextColumn("Cidade", width="small", disabled=True),
+                    COL_SUB_CLASSIF: st.column_config.TextColumn("Sub-Classificação", width="medium", disabled=True),
+                    'Data Atendimento': st.column_config.TextColumn("Data de Atendimento", width="medium", disabled=True),
+                },
+                hide_index=True,
+                use_container_width=True,
+                key="editor_comodato"
+            )
+            
+            comodatos_para_tratar = edited_comodato[edited_comodato["Tratar"] == True][COL_OCORRENCIA].tolist()
+            if comodatos_para_tratar:
+                st.warning(f"⚠️ Você selecionou **{len(comodatos_para_tratar)}** comodato(s) inativo(s) para tratar.")
+                if st.button("🔒 Confirmar Tratativa de Comodato", type="primary", key="btn_comodato"):
+                    for oc in comodatos_para_tratar:
+                        st.session_state.tratadas_manualmente.add(int(oc))
+                    st.success("✅ Comodato(s) tratado(s) com sucesso e removido(s) do painel!")
+                    st.rerun()
+
+            st.write("")
+            df_comodato_download = df_comodato_exibicao.copy()
+            
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df_comodato_download.to_excel(writer, index=False, sheet_name='Comodato Inativo')
+            processed_data = output.getvalue()
+
+            st.download_button(
+                label="📥 Baixar Planilha Separada (Comodato Inativo)",
+                data=processed_data,
+                file_name="comodatos_inativos_pendentes.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        # --- SEÇÃO 4: DISTRIBUIÇÃO POR CIDADE (GRÁFICO + TABELA LADO A LADO NO FIM DA PÁGINA) ---
+        st.divider()
+        st.subheader("4. Visão Geográfica: Ocorrências por Cidade")
+        st.markdown("Distribuição consolidada das ocorrências pendentes por município (gráfico e tabela lado a lado).")
+
+        if not df_filtrado.empty:
+            df_cidades_qtd = df_filtrado['Cidade'].value_counts().reset_index()
+            df_cidades_qtd.columns = ['Cidade', 'Quantidade']
+
+            col_grafico, col_tabela = st.columns(2)
+            with col_grafico:
+                st.markdown("**📊 Gráfico de Distribuição:**")
+                st.bar_chart(df_cidades_qtd.set_index('Cidade'), color="#0055A5")
+            with col_tabela:
+                st.markdown("**📋 Tabela Quantitativa:**")
+                st.dataframe(
+                    df_cidades_qtd, 
+                    hide_index=True, 
+                    use_container_width=True,
+                    column_config={
+                        "Cidade": st.column_config.TextColumn("Município / Cidade"),
+                        "Quantidade": st.column_config.NumberColumn("Qtd. Ocorrências")
+                    }
+                )
 
     except Exception as e:
         st.error(f"⚠️ Ocorreu um erro ao processar o ficheiro. Certifique-se de ser o relatório padrão do sistema. Erro técnico: {e}")
