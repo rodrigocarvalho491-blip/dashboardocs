@@ -185,7 +185,7 @@ st.sidebar.divider()
 if st.sidebar.button("🔄 Atualizar / Limpar Cache"):
     st.rerun()
 
-# --- MAPEAMENTO DAS COLUNAS DO SEU EXCEL ---
+# --- MAPEAMENTO DAS COLUNAS DO EXCEL ---
 COL_OCORRENCIA = "Número da ocorrência"
 COL_CLIENTE = "Nome do cliente"
 COL_ENDERECO = "Endereço de Entrega"
@@ -211,6 +211,15 @@ def extrair_cidade(endereco):
             cidade = partes[-3].strip()
         return cidade.title()
     return s.title()
+
+# Função para simplificar a sub-classificação (ex: [NEGÓCIOS] COMODATO INATIVO -> COMODATO INATIVO)
+def limpar_subclassificacao(sub):
+    if pd.isna(sub):
+        return "-"
+    s = str(sub).strip()
+    if "]" in s:
+        s = s.split("]")[-1].strip()
+    return s
 
 # Função para calcular dias úteis (dias de semana) entre duas datas
 def calcular_dias_uteis(data_inicio, data_fim):
@@ -282,7 +291,7 @@ if arquivo_excel is not None:
         df_pendentes = df_pendentes.dropna(subset=['Prazo_DT'])
         
         df_pendentes['Cidade'] = df_pendentes[COL_ENDERECO].apply(extrair_cidade)
-        df_pendentes[COL_SUB_CLASSIF] = df_pendentes[COL_SUB_CLASSIF].fillna("-").astype(str)
+        df_pendentes['Sub_Simplificada'] = df_pendentes[COL_SUB_CLASSIF].apply(limpar_subclassificacao)
         
         hoje = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         df_pendentes['Dias Úteis Restantes'] = df_pendentes['Prazo_DT'].apply(lambda x: calcular_dias_uteis(hoje, x))
@@ -304,7 +313,7 @@ if arquivo_excel is not None:
             mostrar_so_semana = st.toggle("🗓️ Mostrar apenas os próximos 5 dias úteis", value=False)
         
         cidades_unicas = sorted(list(df_pendentes['Cidade'].unique()))
-        sub_class_unicas = sorted(list(df_pendentes[COL_SUB_CLASSIF].unique()))
+        sub_class_unicas = sorted(list(df_pendentes['Sub_Simplificada'].unique()))
         
         col_f1, col_f2 = st.columns(2)
         with col_f1:
@@ -325,7 +334,7 @@ if arquivo_excel is not None:
             df_filtrado = df_filtrado[df_filtrado['Cidade'].isin(cidades_selecionadas)]
             
         if sub_class_selecionadas:
-            df_filtrado = df_filtrado[df_filtrado[COL_SUB_CLASSIF].isin(sub_class_selecionadas)]
+            df_filtrado = df_filtrado[df_filtrado['Sub_Simplificada'].isin(sub_class_selecionadas)]
         
         df_filtrado['Data Atendimento'] = df_filtrado['Prazo_DT'].dt.strftime('%d/%m/%Y')
         
@@ -355,7 +364,7 @@ if arquivo_excel is not None:
                 COL_OCORRENCIA, 
                 COL_CLIENTE, 
                 'Cidade', 
-                COL_SUB_CLASSIF,
+                'Sub_Simplificada',
                 'Data Atendimento'
             ]].copy()
             df_exibicao[COL_OCORRENCIA] = df_exibicao[COL_OCORRENCIA].astype(str)
@@ -363,14 +372,14 @@ if arquivo_excel is not None:
             edited_df = st.data_editor(
                 df_exibicao.assign(Tratar=False),
                 column_config={
-                    "Tratar": st.column_config.CheckboxColumn("✅ Marcar Tratada?", required=True),
+                    "Tratar": st.column_config.CheckboxColumn("✅ Marcar Tratada?", width="small", required=True),
                     'Status Geral': st.column_config.TextColumn("Status", width="small", disabled=True),
-                    'Dias Úteis Restantes': st.column_config.NumberColumn("Dias Úteis Restantes", width="small", disabled=True),
+                    'Dias Úteis Restantes': st.column_config.NumberColumn("Dias Úteis", width="small", disabled=True),
                     COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small", disabled=True),
-                    COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large", disabled=True),
+                    COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="medium", disabled=True),
                     'Cidade': st.column_config.TextColumn("Cidade", width="small", disabled=True),
-                    COL_SUB_CLASSIF: st.column_config.TextColumn("Sub-Classificação", width="medium", disabled=True),
-                    'Data Atendimento': st.column_config.TextColumn("Data de Atendimento", width="medium", disabled=True),
+                    'Sub_Simplificada': st.column_config.TextColumn("Sub-Classificação", width="medium", disabled=True),
+                    'Data Atendimento': st.column_config.TextColumn("Data Atendimento", width="small", disabled=True),
                 },
                 hide_index=True,
                 use_container_width=True,
@@ -393,7 +402,7 @@ if arquivo_excel is not None:
         st.subheader("3. Relatório Específico: Comodato Inativo")
         st.markdown("Separação exclusiva das ocorrências de **Comodato Inativo** com contagem regressiva em dias úteis e semanas.")
 
-        df_comodato = df_pendentes[df_pendentes[COL_SUB_CLASSIF].str.contains("Comodato Inativo", case=False, na=False)].copy()
+        df_comodato = df_pendentes[df_pendentes['Sub_Simplificada'].str.contains("Comodato Inativo", case=False, na=False)].copy()
 
         if df_comodato.empty:
             st.info("ℹ️ Não foram encontradas ocorrências pendentes com a sub-classificação 'Comodato Inativo' no ficheiro enviado.")
@@ -406,7 +415,7 @@ if arquivo_excel is not None:
                 COL_OCORRENCIA, 
                 COL_CLIENTE, 
                 'Cidade', 
-                COL_SUB_CLASSIF,
+                'Sub_Simplificada',
                 'Data Atendimento'
             ]].copy()
             df_comodato_exibicao[COL_OCORRENCIA] = df_comodato_exibicao[COL_OCORRENCIA].astype(str)
@@ -416,14 +425,14 @@ if arquivo_excel is not None:
             edited_comodato = st.data_editor(
                 df_comodato_exibicao.assign(Tratar=False),
                 column_config={
-                    "Tratar": st.column_config.CheckboxColumn("✅ Marcar Tratada?", required=True),
+                    "Tratar": st.column_config.CheckboxColumn("✅ Marcar Tratada?", width="small", required=True),
                     'Status Comodato': st.column_config.TextColumn("Status Semanal", width="small", disabled=True),
-                    'Dias Úteis Restantes': st.column_config.NumberColumn("Dias Úteis Restantes", width="small", disabled=True),
+                    'Dias Úteis Restantes': st.column_config.NumberColumn("Dias Úteis", width="small", disabled=True),
                     COL_OCORRENCIA: st.column_config.TextColumn("Nº Ocorrência", width="small", disabled=True),
-                    COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="large", disabled=True),
+                    COL_CLIENTE: st.column_config.TextColumn("Nome do Cliente", width="medium", disabled=True),
                     'Cidade': st.column_config.TextColumn("Cidade", width="small", disabled=True),
-                    COL_SUB_CLASSIF: st.column_config.TextColumn("Sub-Classificação", width="medium", disabled=True),
-                    'Data Atendimento': st.column_config.TextColumn("Data de Atendimento", width="medium", disabled=True),
+                    'Sub_Simplificada': st.column_config.TextColumn("Sub-Classificação", width="medium", disabled=True),
+                    'Data Atendimento': st.column_config.TextColumn("Data Atendimento", width="small", disabled=True),
                 },
                 hide_index=True,
                 use_container_width=True,
